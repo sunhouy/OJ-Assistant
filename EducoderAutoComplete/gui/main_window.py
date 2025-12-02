@@ -32,8 +32,8 @@ class EducoderGUI:
         self.use_copy_paste = tk.BooleanVar(value=False)
         self.config_manager = ConfigManager()
 
-        # 设置固定的API Key（经过简单保护处理）
-        self.api_key = self._get_protected_api_key()
+        # API Key
+        self.api_key = "sk-7cc25be93a9540328aa4c104da6c4612"
 
         # 设置窗口属性
         self.root.title(f"Educoder助手 - 版本 {self.CURRENT_VERSION}")
@@ -77,38 +77,8 @@ class EducoderGUI:
         self.config_manager.set_welcome_shown()
         print("已标记欢迎界面已显示")  # 调试输出
 
-
-    def _get_protected_api_key(self):
-        """获取受保护的API Key"""
-        # 方法1：分割字符串并组合
-        parts = [
-            "sk-4a8990c6",
-            "e188463d",
-            "8879159d4bfa0bd5"
-        ]
-
-        # 方法2：使用ASCII码转换（额外混淆）
-        ascii_parts = [
-            99, 50, 115, 116, 45, 78, 71, 69, 52, 89, 84, 107,
-            119, 89, 122, 90, 109, 88, 108, 108, 78, 68, 89, 122,
-            100, 72, 56, 56, 78, 122, 69, 121, 78, 84, 82, 109,
-            97, 48, 66, 105, 90, 68, 85
-        ]
-
-        # 方法3：简单异或加密
-        xor_key = 42
-        encoded = [
-            73, 125, 15, 7, 23, 26, 115, 115, 22, 85, 20, 124,
-            87, 27, 114, 114, 19, 94, 126, 126, 12, 4, 27, 120,
-            74, 66, 6, 6, 12, 124, 23, 27, 12, 30, 8, 95,
-            79, 22, 17, 67, 92, 74, 31
-        ]
-
-        # 返回组合后的API Key
-        return ''.join(parts)
-
     def setup_ui(self):
-        """设置用户界面（完全移除API Key相关UI）"""
+        """设置用户界面"""
         # 创建主框架
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -406,7 +376,7 @@ class EducoderGUI:
 
     def start_server(self):
         """启动WebSocket服务器"""
-        # 使用固定的API Key
+        # 使用硬编码的API Key
         self.server_manager = ServerManager(self)
         if self.server_manager.start():
             self.start_button.config(state="disabled")

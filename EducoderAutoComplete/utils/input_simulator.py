@@ -50,7 +50,7 @@ class InputSimulator:
             return False
 
     def simulate_typing(self, text, is_first_chunk=False):
-        """模拟键盘输入代码"""
+        """模拟键盘输入代码 - 输入左括号后删除编辑器自动补全的右括号"""
         try:
             # 检查鼠标是否在屏幕角落（用户终止信号）
             screen_width, screen_height = pyautogui.size()
@@ -78,11 +78,21 @@ class InputSimulator:
                 time.sleep(0.5)
 
             if text.strip():
-                # 统计左括号数量
-                self.left_brace_count += text.count('{')
+                # 逐个字符输入，特殊处理左括号
+                for char in text:
+                    # 输入当前字符
+                    pyautogui.write(char, interval=0.001)
 
-                # 输入文本
-                pyautogui.write(text, interval=0.05)  # 稍微加快输入速度
+                    # 如果是左括号，等待0.1秒后按Delete键删除编辑器自动补全的右括号
+                    if char == '{':
+                        time.sleep(0.1)  # 等待编辑器完成自动补全
+                        pyautogui.press('delete')  # 删除自动补全的右括号
+                        # self.left_brace_count += 1
+                        # self.gui.log(f"已处理左括号，自动删除补全的右括号 (第{self.left_brace_count}个)")
+
+                    # 如果是右括号，我们自己的代码会输入，不需要额外处理
+                    # elif char == '}':
+                    #    self.gui.log("输入右括号")
 
             return True
 
@@ -91,42 +101,16 @@ class InputSimulator:
             return False
 
     def finalize_formatting(self):
-        """完成代码输入后的格式化操作"""
+        """完成代码输入后的格式化操作 - 现在只需要格式化一次"""
         try:
             time.sleep(0.2)
 
-            # 首先进行一次完整格式化
-            pyautogui.hotkey('alt', 'shift', 'f')
-            time.sleep(0.5)
+            # 只需要进行一次完整格式化，因为括号已经在输入时正确处理了
+            #pyautogui.hotkey('alt', 'shift', 'f')
+            #time.sleep(0.5)
 
-            # 根据左括号数量删除多余的右括号
-            if self.left_brace_count > 0:
-                self.gui.log(f"检测到 {self.left_brace_count} 个左括号，正在删除多余的右括号...")
-
-                # 移动到代码末尾
-                pyautogui.hotkey('ctrl', 'end')
-                time.sleep(0.1)
-
-                # 删除多余的右括号，每次删除后都格式化
-                for i in range(self.left_brace_count):
-                    # 删除一个右括号
-                    pyautogui.press('backspace')
-                    time.sleep(0.1)
-
-                    # 每次删除后都进行格式化
-                    pyautogui.hotkey('alt', 'shift', 'f')
-                    time.sleep(0.3)
-
-                    self.gui.log(f"已删除 {i + 1}/{self.left_brace_count} 个多余的右括号并格式化")
-
-                self.gui.log(f"已完成所有右括号删除和格式化")
-
-            # 最终格式化一次确保代码整洁
-            pyautogui.hotkey('alt', 'shift', 'f')
-            time.sleep(0.3)
-
-            self.gui.log("代码输入和格式化完成")
-            messagebox.showinfo("提示", "代码输入已完成。如果大括号仍有问题，请手动调整。")
+            #self.gui.log(f"代码输入完成，共处理了 {self.left_brace_count} 个左括号，已格式化")
+            messagebox.showinfo("提示", "代码输入已完成。")
             return True
 
         except Exception as e:

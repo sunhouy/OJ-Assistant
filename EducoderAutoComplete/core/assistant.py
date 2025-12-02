@@ -10,8 +10,8 @@ class EducoderAssistant:
     def __init__(self, gui):
         self.gui = gui
         self.client = AsyncOpenAI(
-            api_key=gui.api_key,  # 改为直接使用 gui.api_key
-            base_url="https://api.deepseek.com/v1"
+            api_key=gui.api_key,
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
         )
         self.last_question = None
         self.is_first_chunk = True
@@ -148,16 +148,16 @@ class EducoderAssistant:
     async def get_complete_code_solution(self, question_text):
         """获取完整代码解决方案（非流式）"""
         try:
-            self.gui.log("向DeepSeek发送请求获取完整代码解决方案...")
+            self.gui.log("获取完整代码解决方案...")
 
             prompt = self._build_prompt(question_text)
 
             response = await self.client.chat.completions.create(
-                model="deepseek-coder",
+                model="qwen3-coder-plus",
                 messages=[
                     {
                         "role": "system",
-                        "content": "你是一个专业的编程助手，只返回代码，不包含任何解释或注释。尤其注意代码前一定不要有```c的标记，代码最后也不要有```的标记。不要return 0这一行。"
+                        "content": "你是一个专业的编程助手，只返回代码，不包含任何解释或注释。尤其注意代码前一定不要有```c的标记，代码最后也不要有```的标记。一定不要return 0这一行。"
                     },
                     {
                         "role": "user",
@@ -165,7 +165,7 @@ class EducoderAssistant:
                     }
                 ],
                 max_tokens=8192,
-                temperature=0.3,
+                temperature=0,
                 stream=False  # 非流式输出
             )
 
@@ -190,11 +190,11 @@ class EducoderAssistant:
             prompt = self._build_prompt(question_text)
 
             response = await self.client.chat.completions.create(
-                model="deepseek-coder",
+                model="qwen3-coder-plus",
                 messages=[
                     {
                         "role": "system",
-                        "content": "你是一个专业的编程助手，只返回代码，不包含任何解释或注释。尤其注意代码前一定不要有```c的标记，代码最后也不要有```的标记。不要return 0这一行。"
+                        "content": "你是一个专业的编程助手，只返回代码，不包含任何解释或注释。尤其注意代码前一定不要有```c的标记，代码最后也不要有```的标记。一定不要return 0这一行。"
                     },
                     {
                         "role": "user",
@@ -202,7 +202,7 @@ class EducoderAssistant:
                     }
                 ],
                 max_tokens=8192,
-                temperature=0.3,
+                temperature=0,
                 stream=True
             )
 
