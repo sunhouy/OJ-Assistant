@@ -1,4 +1,5 @@
-﻿import tkinter as tk
+﻿# main_window.py
+import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 import threading
 import queue
@@ -33,12 +34,15 @@ class EducoderGUI:
         self.config_manager = ConfigManager()
         self.show_log_var = tk.BooleanVar(value=False)  # 默认不显示日志
 
+        # 语言选择变量 - 默认C语言
+        self.selected_language = tk.StringVar(value="c")
+
         # API Key
         self.api_key = "sk-7cc25be93a9540328aa4c104da6c4612"
 
         # 设置窗口属性
         self.root.title(f"Educoder助手 - 版本 {self.CURRENT_VERSION}")
-        self.root.geometry("800x500")  # 增加高度以容纳日志区域
+        self.root.geometry("850x550")  # 增加宽度以适应语言选择
         self.root.resizable(True, True)
 
         # 设置关闭窗口的处理
@@ -107,15 +111,36 @@ class EducoderGUI:
         ttk.Button(button_frame, text="检测更新", command=self.check_update, width=10).pack(side=tk.LEFT, padx=2)
         ttk.Button(button_frame, text="退出登录", command=self.logout, width=10).pack(side=tk.LEFT, padx=2)
 
-        # 复制粘贴模式选项和日志显示选项
+        # 配置选项区域
         options_frame = ttk.Frame(main_frame)
         options_frame.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=5)
 
+        # 复制粘贴模式选项
         ttk.Checkbutton(
             options_frame,
             text="允许复制粘贴（一次性输入完整代码）",
             variable=self.use_copy_paste
         ).pack(side=tk.LEFT)
+
+        # 新增语言选择下拉列表
+        lang_frame = ttk.Frame(options_frame)
+        lang_frame.pack(side=tk.LEFT, padx=(20, 0))
+
+        ttk.Label(lang_frame, text="选择编程语言:").pack(side=tk.LEFT, padx=(0, 5))
+
+        # 定义语言选项
+        languages = ["c", "c++", "java", "python", "javascript", "c#"]
+        self.language_combo = ttk.Combobox(
+            lang_frame,
+            textvariable=self.selected_language,
+            values=languages,
+            state="readonly",
+            width=12
+        )
+        self.language_combo.pack(side=tk.LEFT)
+
+        # 绑定语言改变事件
+        self.selected_language.trace('w', self.on_language_changed)
 
         # 新增日志显示复选框
         ttk.Checkbutton(
@@ -144,6 +169,13 @@ class EducoderGUI:
             row=1, column=0, columnspan=3, sticky=tk.W, pady=2
         )
 
+        # 当前语言显示
+        self.current_lang_label = ttk.Label(
+            server_frame,
+            text=f"当前语言: {self.selected_language.get().upper()}"
+        )
+        self.current_lang_label.grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=2)
+
         # 状态显示
         self.status_var = tk.StringVar(value="准备就绪")
         status_label = ttk.Label(main_frame, textvariable=self.status_var)
@@ -163,6 +195,23 @@ class EducoderGUI:
 
         # 启动日志处理
         self.process_log_queue()
+
+        # 记录初始语言设置
+        self.log(f"初始语言设置为: {self.selected_language.get().upper()}")
+
+    def on_language_changed(self, *args):
+        """当语言选择改变时调用"""
+        selected_lang = self.selected_language.get()
+        self.current_lang_label.config(text=f"当前语言: {selected_lang.upper()}")
+        self.log(f"语言已更改为: {selected_lang.upper()}")
+
+        # 如果服务器正在运行，通知服务器语言已更改
+        if self.server_manager and hasattr(self.server_manager, 'assistant'):
+            try:
+                self.server_manager.assistant.update_language(selected_lang)
+                self.log(f"已通知服务器更新语言为: {selected_lang.upper()}")
+            except Exception as e:
+                self.log(f"通知服务器更新语言时出错: {e}")
 
     def toggle_log_visibility(self):
         """切换日志区域的显示/隐藏"""
@@ -441,6 +490,7 @@ class EducoderGUI:
             self.server_status_var.set("服务器状态: 启动中...")
             self.status_var.set("服务器启动中...")
             self.log("正在启动WebSocket服务器...")
+            self.log(f"当前语言设置: {self.selected_language.get().upper()}")
 
     def stop_server(self):
         """停止WebSocket服务器"""
