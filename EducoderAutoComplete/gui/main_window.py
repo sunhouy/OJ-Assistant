@@ -12,9 +12,9 @@ import webbrowser
 import socket
 import time
 
-from gui.dialogs import FirstRunDialog
-from core.server import ServerManager
 from utils.config import ConfigManager
+from core.server import ServerManager
+from gui.input_test import TestInputDialog
 
 
 class EducoderGUI:
@@ -31,13 +31,14 @@ class EducoderGUI:
         self.log_queue = queue.Queue()
         self.use_copy_paste = tk.BooleanVar(value=False)
         self.config_manager = ConfigManager()
+        self.show_log_var = tk.BooleanVar(value=False)  # 默认不显示日志
 
         # API Key
         self.api_key = "sk-7cc25be93a9540328aa4c104da6c4612"
 
         # 设置窗口属性
         self.root.title(f"Educoder助手 - 版本 {self.CURRENT_VERSION}")
-        self.root.geometry("800x350")
+        self.root.geometry("800x500")  # 增加高度以容纳日志区域
         self.root.resizable(True, True)
 
         # 设置关闭窗口的处理
@@ -55,7 +56,7 @@ class EducoderGUI:
         """显示首次运行提示对话框"""
         print("显示首次运行对话框")  # 调试输出
         # 隐藏主窗口
-        # self.root.withdraw()
+        self.root.withdraw()
         print("主窗口已隐藏")  # 调试输出
 
         # 创建首次运行对话框
@@ -87,7 +88,7 @@ class EducoderGUI:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(1, weight=1)
+        main_frame.rowconfigure(4, weight=1)  # 日志区域可扩展
 
         # 用户信息区域
         user_frame = ttk.Frame(main_frame)
@@ -97,21 +98,34 @@ class EducoderGUI:
         ttk.Label(user_frame, text=f"欢迎, {self.username} (版本: {self.CURRENT_VERSION})").grid(row=0, column=0,
                                                                                                  sticky=tk.W)
 
-        # 添加检测更新按钮
-        ttk.Button(user_frame, text="检测更新", command=self.check_update).grid(row=0, column=1, padx=5)
-        ttk.Button(user_frame, text="退出登录", command=self.logout).grid(row=0, column=2, sticky=tk.E)
+        # 添加检测更新按钮和输入测试按钮
+        button_frame = ttk.Frame(user_frame)
+        button_frame.grid(row=0, column=1, sticky=tk.E)
 
-        # 复制粘贴模式选项（调整位置）
-        copy_paste_frame = ttk.Frame(main_frame)
-        copy_paste_frame.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=5)
+        ttk.Button(button_frame, text="输入测试", command=self.open_test_input_dialog, width=10).pack(side=tk.LEFT,
+                                                                                                      padx=2)
+        ttk.Button(button_frame, text="检测更新", command=self.check_update, width=10).pack(side=tk.LEFT, padx=2)
+        ttk.Button(button_frame, text="退出登录", command=self.logout, width=10).pack(side=tk.LEFT, padx=2)
+
+        # 复制粘贴模式选项和日志显示选项
+        options_frame = ttk.Frame(main_frame)
+        options_frame.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=5)
 
         ttk.Checkbutton(
-            copy_paste_frame,
+            options_frame,
             text="允许复制粘贴（一次性输入完整代码）",
             variable=self.use_copy_paste
         ).pack(side=tk.LEFT)
 
-        # 服务器控制区域（调整位置）
+        # 新增日志显示复选框
+        ttk.Checkbutton(
+            options_frame,
+            text="显示日志",
+            variable=self.show_log_var,
+            command=self.toggle_log_visibility
+        ).pack(side=tk.LEFT, padx=(20, 0))
+
+        # 服务器控制区域
         server_frame = ttk.LabelFrame(main_frame, text="服务器控制", padding="5")
         server_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
         server_frame.columnconfigure(1, weight=1)
@@ -130,10 +144,53 @@ class EducoderGUI:
             row=1, column=0, columnspan=3, sticky=tk.W, pady=2
         )
 
-        # 状态显示（调整位置）
+        # 状态显示
         self.status_var = tk.StringVar(value="准备就绪")
         status_label = ttk.Label(main_frame, textvariable=self.status_var)
         status_label.grid(row=3, column=0, columnspan=3, sticky=tk.W, pady=5)
+
+        # 日志区域（默认隐藏）
+        self.log_frame = ttk.LabelFrame(main_frame, text="日志输出", padding="5")
+        self.log_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        self.log_frame.columnconfigure(0, weight=1)
+        self.log_frame.rowconfigure(0, weight=1)
+
+        self.log_text = scrolledtext.ScrolledText(self.log_frame, state='disabled', height=8)
+        self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # 默认隐藏日志区域
+        self.log_frame.grid_remove()
+
+        # 启动日志处理
+        self.process_log_queue()
+
+    def toggle_log_visibility(self):
+        """切换日志区域的显示/隐藏"""
+        if self.show_log_var.get():
+            self.log_frame.grid()
+        else:
+            self.log_frame.grid_remove()
+
+    def open_test_input_dialog(self):
+        """打开输入测试对话框"""
+        TestInputDialog(self.root)
+
+    def process_log_queue(self):
+        """处理日志队列"""
+        while not self.log_queue.empty():
+            try:
+                msg = self.log_queue.get_nowait()
+                self._add_log_message(msg)
+            except queue.Empty:
+                break
+        self.root.after(100, self.process_log_queue)
+
+    def _add_log_message(self, message):
+        """在日志区域添加消息"""
+        self.log_text.config(state='normal')
+        self.log_text.insert(tk.END, f"[{time.strftime('%H:%M:%S')}] {message}\n")
+        self.log_text.see(tk.END)
+        self.log_text.config(state='disabled')
 
     def check_update(self):
         """检测更新"""
@@ -447,3 +504,32 @@ class EducoderGUI:
     def update_server_status(self, message):
         """更新服务器状态"""
         self.server_status_var.set(message)
+
+
+class FirstRunDialog:
+    def __init__(self, parent):
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("欢迎使用 Educoder 助手")
+        self.dialog.geometry("400x200")
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+
+        # 居中显示
+        self.dialog.update_idletasks()
+        width = self.dialog.winfo_width()
+        height = self.dialog.winfo_height()
+        x = (self.dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.dialog.winfo_screenheight() // 2) - (height // 2)
+        self.dialog.geometry(f'{width}x{height}+{x}+{y}')
+
+        frame = ttk.Frame(self.dialog, padding="20")
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frame, text="欢迎使用 Educoder 助手!", font=("Arial", 14, "bold")).pack(pady=10)
+        ttk.Label(frame, text="这是一个专为 Educoder 平台设计的辅助工具", wraplength=350).pack(pady=5)
+        ttk.Label(frame, text="点击确定开始使用", wraplength=350).pack(pady=5)
+
+        button_frame = ttk.Frame(frame)
+        button_frame.pack(pady=15)
+
+        ttk.Button(button_frame, text="确定", command=self.dialog.destroy, width=10).pack()
