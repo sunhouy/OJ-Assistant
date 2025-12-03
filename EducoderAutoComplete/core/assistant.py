@@ -98,7 +98,10 @@ class EducoderAssistant:
                     await websocket.send("✅ 代码已通过复制粘贴完成输入")
                     self.gui.root.after(0, lambda: self.gui.update_status("代码生成完成"))
                 else:
-                    await websocket.send("❌ 代码粘贴失败")
+                    if self.input_simulator.esc_pressed:
+                        await websocket.send("❌ 用户按ESC键终止了代码输入")
+                    else:
+                        await websocket.send("❌ 代码粘贴失败")
             else:
                 await websocket.send("❌ 代码生成失败")
 
@@ -113,9 +116,9 @@ class EducoderAssistant:
         # 获取代码解决方案并实时输入
         full_code = ""
         async for code_response in self.get_code_solution(question_text):
-            # 检查是否应该停止输入
-            if not self.typing_active:
-                await websocket.send("用户手动终止代码输入")
+            # 检查ESC键是否被按下
+            if self.input_simulator.esc_pressed:
+                await websocket.send("❌ 用户按ESC键终止了代码输入")
                 break
 
             await websocket.send(json.dumps(code_response, ensure_ascii=False))
@@ -130,20 +133,29 @@ class EducoderAssistant:
                 )
                 self.is_first_chunk = False
 
+                # 如果输入失败，检查是否是ESC键导致的
                 if not input_success:
-                    await websocket.send("代码输入出现错误")
+                    if self.input_simulator.esc_pressed:
+                        await websocket.send("❌ 用户按ESC键终止了代码输入")
+                    else:
+                        await websocket.send("❌ 代码输入出现错误")
                     break
 
             elif code_response.get("type") == "code_complete":
                 full_code = code_response.get("full_code", full_code)
 
-                if self.typing_active:  # 只有未手动停止时才格式化
-                    format_success = self.input_simulator.finalize_formatting()
-                    if format_success:
-                        await websocket.send("✅ 代码已完成并自动格式化")
-                        self.gui.root.after(0, lambda: self.gui.update_status("代码生成完成"))
-                    else:
-                        await websocket.send("❌ 代码格式化失败")
+                # 只有在未按下ESC键的情况下才显示完成消息
+                if not self.input_simulator.esc_pressed:
+                    await websocket.send("✅ 代码输入完成")
+                    self.gui.root.after(0, lambda: self.gui.update_status("代码生成完成"))
+                    # 显示完成提示
+                    self.gui.root.after(0, lambda: self.input_simulator._show_completion_message())
+
+        # 如果ESC键被按下，确保显示终止消息
+        if self.input_simulator.esc_pressed:
+            # 确保移除ESC键监听
+            import keyboard
+            keyboard.unhook_all()
 
     async def get_complete_code_solution(self, question_text):
         """获取完整代码解决方案（非流式）"""
@@ -210,7 +222,8 @@ class EducoderAssistant:
             self.is_first_chunk = True
 
             async for chunk in response:
-                if not self.typing_active:  # 如果用户终止了输入，提前结束
+                # 检查ESC键是否被按下
+                if self.input_simulator.esc_pressed:
                     break
 
                 if chunk.choices and chunk.choices[0].delta.content is not None:
@@ -223,7 +236,8 @@ class EducoderAssistant:
                         "is_complete": False
                     }
 
-            if self.typing_active:  # 只有未手动停止时才返回完整代码
+            # 只有在未按下ESC键的情况下才返回完整代码
+            if not self.input_simulator.esc_pressed:
                 self.gui.log(f"代码解决方案流式传输完成，总长度: {len(full_code)} 字符")
 
                 cleaned_code = self.clean_code_response(full_code)
@@ -233,7 +247,6 @@ class EducoderAssistant:
                     "full_code": cleaned_code,
                     "is_complete": True
                 }
-
 
         except Exception as e:
             self.gui.log(f"获取DeepSeek响应失败: {e}")
