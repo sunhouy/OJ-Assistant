@@ -1,4 +1,6 @@
 ﻿import asyncio
+import tkinter as tk
+from tkinter import ttk, messagebox
 import websockets
 import json
 from openai import AsyncOpenAI
@@ -160,6 +162,7 @@ class EducoderAssistant:
                 # 只有在未按下ESC键的情况下才显示完成消息
                 if not self.input_simulator.esc_pressed:
                     await websocket.send("✅ 代码输入完成")
+                    messagebox.showinfo("提示", "代码输入完成")
                     self.gui.root.after(0,
                                         lambda: self.gui.update_status(f"{self.current_language.upper()}代码生成完成"))
                     # 显示完成提示
@@ -221,11 +224,11 @@ class EducoderAssistant:
                 messages=[
                     {
                         "role": "system",
-                        "content": prompt
+                        "content": self._get_system_prompt()  # 系统提示词
                     },
                     {
                         "role": "user",
-                        "content": prompt
+                        "content": prompt  # 用户提示词
                     }
                 ],
                 max_tokens=8192,
@@ -284,22 +287,21 @@ class EducoderAssistant:
 
         lang_name = language_mapping.get(self.current_language, self.current_language.upper())
 
-        # 针对不同语言的特定要求
-        base_prompt = f"你是一个专业的编程助手，只返回{lang_name}代码，不包含任何解释或注释。"
+        # 加强版的系统提示词
+        system_prompt = f"""你是一个专业的编程助手，负责生成{lang_name}代码。
 
-        # 针对不同语言的特定格式要求
-        if self.current_language in ["C", "C++"]:
-            base_prompt += "尤其注意代码前一定不要有```c或```cpp的标记，代码最后也不要有```的标记。如果是C语言程序，一定不要return 0这一行。C++不要使用using namespace std。"
-        elif self.current_language == "Python":
-            base_prompt += "尤其注意代码前一定不要有```Python的标记，代码最后也不要有```的标记。"
-        elif self.current_language == "Java":
-            base_prompt += "尤其注意代码前一定不要有```Java的标记，代码最后也不要有```的标记。需要包含完整的类定义。"
-        elif self.current_language == "Javascript":
-            base_prompt += "尤其注意代码前一定不要有```Javascript的标记，代码最后也不要有```的标记。"
-        elif self.current_language == "C#":
-            base_prompt += "尤其注意代码前一定不要有```csharp的标记，代码最后也不要有```的标记。需要包含完整的命名空间和类定义。"
+    重要规则：
+    1. 只返回纯代码，不要有任何解释、注释或额外文字
+    2. 绝对不要使用任何代码块标记（如```或```{self.current_language}）
+    3. 代码必须完整且可运行
+    4. 严格按照题目要求编写代码
 
-        return base_prompt
+    {"5. 如果是C语言程序，不要包含return 0语句" if self.current_language == "C" else ""}
+    {"6. 如果是C++程序，不要使用using namespace std" if self.current_language == "C++" else ""}
+
+    你的输出应该只包含代码，没有任何其他内容。"""
+
+        return system_prompt
 
     def _build_prompt(self, question_text):
         """构建提示词"""
