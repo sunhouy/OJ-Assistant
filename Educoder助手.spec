@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['EducoderAutoComplete\\main.py'],
+    ['C:\\Users\\sunhouyun\\Desktop\\Educoder\\EducoderAutoComplete\\main.py'],
     pathex=[],
     binaries=[],
     datas=[],

@@ -75,7 +75,7 @@ class InputSimulator:
                 pyautogui.hotkey('ctrl', 'a')  # 全选
                 time.sleep(0.1)
                 pyautogui.hotkey('delete')  # 删除
-                time.sleep(0.5)
+                time.sleep(0.1)
 
             if text.strip():
                 # 逐个字符输入，特殊处理左括号
