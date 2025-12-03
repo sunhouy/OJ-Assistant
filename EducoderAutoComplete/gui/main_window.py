@@ -1,5 +1,4 @@
-﻿# main_window.py
-import tkinter as tk
+﻿import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 import threading
 import queue
@@ -12,6 +11,10 @@ import urllib.error
 import webbrowser
 import socket
 import time
+import sys
+import signal
+import psutil
+import atexit
 
 from utils.config import ConfigManager
 from core.server import ServerManager
@@ -22,10 +25,11 @@ class EducoderGUI:
     # 当前应用版本号
     CURRENT_VERSION = "0.1"  # 请根据实际情况更新版本号
 
-    def __init__(self, root, username, token):
+    def __init__(self, root, username, token, parent_window=None):
         self.root = root
         self.username = username
         self.token = token
+        self.parent_window = parent_window  # 保存父窗口引用
 
         # 初始化变量
         self.server_manager = None
@@ -33,6 +37,10 @@ class EducoderGUI:
         self.use_copy_paste = tk.BooleanVar(value=False)
         self.config_manager = ConfigManager()
         self.show_log_var = tk.BooleanVar(value=False)  # 默认不显示日志
+        self.is_closing = False  # 标记是否正在关闭
+
+        # 注册退出时的清理函数
+        atexit.register(self.cleanup_processes)
 
         # 语言选择变量 - 默认C语言
         self.selected_language = tk.StringVar(value="c")
@@ -41,46 +49,20 @@ class EducoderGUI:
         self.api_key = "sk-7cc25be93a9540328aa4c104da6c4612"
 
         # 设置窗口属性
-        self.root.title(f"Educoder助手 - 版本 {self.CURRENT_VERSION}")
+        self.root.title("Educoder助手")
         self.root.geometry("850x550")  # 增加宽度以适应语言选择
         self.root.resizable(True, True)
 
         # 设置关闭窗口的处理
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        # 如果首次运行，先隐藏主窗口
-        if self.config_manager.should_show_welcome():
-            # 立即显示首次运行提示
-            self._show_first_run_dialog()
-        else:
-            # 不是首次运行，直接设置UI并显示
-            self.setup_ui()
-
-    def _show_first_run_dialog(self):
-        """显示首次运行提示对话框"""
-        print("显示首次运行对话框")  # 调试输出
-        # 隐藏主窗口
-        self.root.withdraw()
-        print("主窗口已隐藏")  # 调试输出
-
-        # 创建首次运行对话框
-        dialog = FirstRunDialog(self.root)
-        print("对话框已创建")  # 调试输出
-
-        # 等待对话框关闭
-        self.root.wait_window(dialog.dialog)
-        print("对话框已关闭")  # 调试输出
-
-        # 对话框关闭后，设置UI并显示主窗口
+        # 设置基础UI
         self.setup_ui()
+
+        # 确保窗口可见
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
-        print("主窗口已显示")  # 调试输出
-
-        # 标记已显示过欢迎界面
-        self.config_manager.set_welcome_shown()
-        print("已标记欢迎界面已显示")  # 调试输出
 
     def setup_ui(self):
         """设置用户界面"""
@@ -232,7 +214,9 @@ class EducoderGUI:
                 self._add_log_message(msg)
             except queue.Empty:
                 break
-        self.root.after(100, self.process_log_queue)
+        # 如果正在关闭，不再安排下一次处理
+        if not self.is_closing:
+            self.root.after(100, self.process_log_queue)
 
     def _add_log_message(self, message):
         """在日志区域添加消息"""
@@ -513,7 +497,7 @@ class EducoderGUI:
             threading.Thread(target=self._perform_logout, daemon=True).start()
 
             # 关闭主窗口
-            self.root.destroy()
+            self.on_close()
 
     def _perform_logout(self):
         """执行登出操作"""
@@ -535,17 +519,77 @@ class EducoderGUI:
         except:
             pass  # 忽略登出错误
 
+    def cleanup_processes(self):
+        """清理所有进程"""
+        if hasattr(self, 'is_closing') and self.is_closing:
+            return
+
+        self.log("清理后台进程...")
+
+        # 停止服务器
+        if self.server_manager:
+            self.server_manager.stop()
+            time.sleep(0.5)  # 给服务器停止一点时间
+
+        # 清理可能的子进程
+        try:
+            # 获取当前进程ID
+            current_pid = os.getpid()
+            current_process = psutil.Process(current_pid)
+
+            # 获取所有子进程
+            children = current_process.children(recursive=True)
+
+            # 终止所有子进程
+            for child in children:
+                try:
+                    child.terminate()
+                except:
+                    pass
+
+            # 等待子进程终止
+            gone, still_alive = psutil.wait_procs(children, timeout=3)
+
+            # 强制杀死仍然存活的进程
+            for child in still_alive:
+                try:
+                    child.kill()
+                except:
+                    pass
+
+        except Exception as e:
+            self.log(f"清理进程时出错: {e}")
+
     def on_close(self):
         """关闭窗口时的处理"""
+        if self.is_closing:
+            return
+
+        self.is_closing = True
+        self.log("正在关闭应用...")
+
         # 停止服务器
         if self.server_manager:
             self.server_manager.stop()
 
-        # 发送登出请求
+        # 发送登出请求（不阻塞主线程）
         threading.Thread(target=self._perform_logout, daemon=True).start()
+
+        # 停止所有定时器
+        try:
+            for after_id in self.root.tk.call('after', 'info'):
+                self.root.after_cancel(after_id)
+        except:
+            pass
+
+        # 清理进程
+        self.cleanup_processes()
 
         # 关闭窗口
         self.root.destroy()
+
+        # 强制退出程序
+        os._exit(0)
 
     def update_status(self, message):
         """更新状态信息"""
@@ -554,32 +598,3 @@ class EducoderGUI:
     def update_server_status(self, message):
         """更新服务器状态"""
         self.server_status_var.set(message)
-
-
-class FirstRunDialog:
-    def __init__(self, parent):
-        self.dialog = tk.Toplevel(parent)
-        self.dialog.title("欢迎使用 Educoder 助手")
-        self.dialog.geometry("400x200")
-        self.dialog.transient(parent)
-        self.dialog.grab_set()
-
-        # 居中显示
-        self.dialog.update_idletasks()
-        width = self.dialog.winfo_width()
-        height = self.dialog.winfo_height()
-        x = (self.dialog.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.dialog.winfo_screenheight() // 2) - (height // 2)
-        self.dialog.geometry(f'{width}x{height}+{x}+{y}')
-
-        frame = ttk.Frame(self.dialog, padding="20")
-        frame.pack(fill=tk.BOTH, expand=True)
-
-        ttk.Label(frame, text="欢迎使用 Educoder 助手!", font=("Arial", 14, "bold")).pack(pady=10)
-        ttk.Label(frame, text="这是一个专为 Educoder 平台设计的辅助工具", wraplength=350).pack(pady=5)
-        ttk.Label(frame, text="点击确定开始使用", wraplength=350).pack(pady=5)
-
-        button_frame = ttk.Frame(frame)
-        button_frame.pack(pady=15)
-
-        ttk.Button(button_frame, text="确定", command=self.dialog.destroy, width=10).pack()

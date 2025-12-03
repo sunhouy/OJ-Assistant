@@ -3,12 +3,14 @@ from tkinter import ttk
 import configparser
 import os
 
+from utils.config import ConfigManager
 
 class FirstRunDialog:
-    def __init__(self, parent):
-        self.ok_button = None
+    def __init__(self, parent, on_close_callback=None):
         self.parent = parent
+        self.config_manager = ConfigManager()  # 创建 ConfigManager 实例
         self.dont_show_again = tk.BooleanVar(value=False)
+        self.on_close_callback = on_close_callback  # 关闭对话框时的回调函数
 
         # 创建对话框
         self.dialog = tk.Toplevel(parent)
@@ -118,7 +120,7 @@ class FirstRunDialog:
         # 欢迎标题
         title_label = ttk.Label(
             scrollable_frame,
-            text="欢迎使用本应用 - 使用指南",
+            text="使用指南",
             style='Title.TLabel'
         )
         title_label.pack(pady=(0, 15), anchor='center')
@@ -259,16 +261,24 @@ class FirstRunDialog:
 
     def on_confirm(self):
         """确定按钮点击事件"""
-        # 保存设置
+        # 使用 ConfigManager 保存设置
+        self.config_manager._ensure_config()
+
+        # 使用 configparser 直接写入正确的配置文件
         config = configparser.ConfigParser()
         config['SETTINGS'] = {
             'show_welcome': str(not self.dont_show_again.get())
         }
 
         try:
-            with open('config.ini', 'w', encoding='utf-8') as configfile:
+            with open(self.config_manager.config_file, 'w', encoding='utf-8') as configfile:
                 config.write(configfile)
         except Exception as e:
             print(f"保存配置失败: {e}")
 
+        # 关闭对话框
         self.dialog.destroy()
+
+        # 如果有回调函数，执行它
+        if self.on_close_callback:
+            self.on_close_callback()

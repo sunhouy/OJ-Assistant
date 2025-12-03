@@ -1,0 +1,1 @@
+python -m PyInstaller --onefile --name="Educoder助手" --add-data "EducoderAutoComplete\config.ini;." --add-data "EducoderAutoComplete\app.ico;." --add-data "app.ico;." --icon=app.ico --windowed C:\Users\sunhouyun\Desktop\Educoder\EducoderAutoComplete\main.py
