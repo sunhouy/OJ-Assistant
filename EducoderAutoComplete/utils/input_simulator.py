@@ -3,6 +3,7 @@ import time
 import pyperclip
 import keyboard
 from tkinter import messagebox
+import uiautomation as auto
 
 
 class InputSimulator:
@@ -25,6 +26,11 @@ class InputSimulator:
         if not self.esc_pressed:  # 避免重复触发
             self.esc_pressed = True
             self.typing_active = False
+
+    def escape_braces(self, text):
+        """转义文本中的左括号"""
+        # { -> {{}
+        return text.replace('{', '{{}')
 
     def clean_code_markers(self, code):
         """清理代码中的代码块标记（如```c和```），处理标记和代码在同一行的情况"""
@@ -100,7 +106,7 @@ class InputSimulator:
         if not cleaned_code.strip():
             return code
 
-        # 额外检查：如果清理后的代码以```开头（说明之前的处理可能遗漏了），再次清理
+        # 如果清理后的代码以```开头（说明之前的处理可能遗漏了），再次清理
         if cleaned_code.strip().startswith('```'):
             # 找到第一个换行符
             first_newline = cleaned_code.find('\n')
@@ -134,10 +140,10 @@ class InputSimulator:
             y = screen_height // 2
             pyautogui.click(x=x, y=y)
             time.sleep(0.1)
-            pyautogui.hotkey('ctrl', 'a')
+            auto.SendKeys('{Ctrl}a')
             time.sleep(0.1)
-            pyautogui.hotkey('delete')
-            time.sleep(0.5)
+            auto.SendKeys('{Delete}')
+            time.sleep(0.2)
 
             # 检查ESC键
             if self.esc_pressed:
@@ -148,29 +154,11 @@ class InputSimulator:
 
             # 复制清理后的代码到剪贴板
             pyperclip.copy(cleaned_code)
-            time.sleep(0.1)
+            time.sleep(0.05)
 
-            # 检查ESC键
-            if self.esc_pressed:
-                self.gui.log("用户按下了ESC键，终止代码粘贴")
-                self._show_termination_message()
-                keyboard.unhook_all()
-                return False
-
-            # 粘贴代码
-            pyautogui.hotkey('ctrl', 'v')
-            time.sleep(0.5)
-
-            # 检查ESC键
-            if self.esc_pressed:
-                self.gui.log("用户按下了ESC键，终止代码粘贴")
-                self._show_termination_message()
-                keyboard.unhook_all()
-                return False
-
-            # 格式化代码
-            pyautogui.hotkey('alt', 'shift', 'f')
-            time.sleep(0.5)
+            # 使用uiautomation粘贴代码
+            auto.SendKeys('{Ctrl}v')
+            time.sleep(0.05)
 
             self.gui.log("代码已通过复制粘贴完成输入")
 
@@ -187,7 +175,7 @@ class InputSimulator:
             return False
 
     def simulate_typing(self, text, is_first_chunk=False):
-        """模拟键盘输入代码 - 自动清理代码标记并输入代码"""
+        """模拟键盘输入代码"""
         try:
             # 如果是第一个块，清理整个代码的标记
             if is_first_chunk:
@@ -214,32 +202,16 @@ class InputSimulator:
                 x = screen_width // 2
                 y = screen_height // 2
                 pyautogui.click(x=x, y=y)
-
                 time.sleep(0.1)
-
-                # 检查ESC键
-                if self.esc_pressed:
-                    self.gui.log("用户按下了ESC键，终止代码输入")
-                    self._show_termination_message()
-                    keyboard.unhook_all()
-                    return False
-
-                pyautogui.hotkey('ctrl', 'a')  # 全选
+                auto.SendKeys('{Ctrl}a')    # 全选
                 time.sleep(0.1)
-
-                # 检查ESC键
-                if self.esc_pressed:
-                    self.gui.log("用户按下了ESC键，终止代码输入")
-                    self._show_termination_message()
-                    keyboard.unhook_all()
-                    return False
-
-                pyautogui.hotkey('delete')  # 删除
+                auto.SendKeys('{Delete}')   # 删除
                 time.sleep(0.1)
 
             if text.strip():
-                i = 0
-                while i < len(text):
+                # 使用批量输入
+                lines = text.split('\n')
+                for line_index, line in enumerate(lines):
                     # 检查ESC键
                     if self.esc_pressed:
                         self.gui.log("用户按下了ESC键，终止代码输入")
@@ -247,46 +219,52 @@ class InputSimulator:
                         keyboard.unhook_all()
                         return False
 
-                    char = text[i]
+                    if line.strip():  # 只处理非空行
+                        # 处理行内的左括号，每个左括号都需要特殊处理
+                        if '{' in line:
+                            # 分割行以便处理左括号
+                            parts = []
+                            last_index = 0
+                            for i, char in enumerate(line):
+                                if char == '{':
+                                    # 添加左括号前的部分（转义右括号）
+                                    if i > last_index:
+                                        plain_part = line[last_index:i]
+                                        # 转义左括号
+                                        escaped_part = plain_part.replace('{', '{{}')
+                                        parts.append(escaped_part)
+                                    # 添加左括号（转义）并删除自动补全的右括号
+                                    parts.append('{')
+                                    last_index = i + 1
 
-                    # 处理换行符
-                    if char == '\n':
-                        # 输入换行（回车键）
-                        pyautogui.press('enter')
-                        time.sleep(0.1)  # 等待编辑器自动缩进完成
+                            # 添加剩余部分
+                            if last_index < len(line):
+                                plain_part = line[last_index:]
+                                # 转义左括号
+                                escaped_part = plain_part.replace('{', '{{}')
+                                parts.append(escaped_part)
 
-                        self.line_count += 1
-
-                        # 移动到下一个字符（跳过换行符本身）
-                        i += 1
-
-                        # 跳过原代码中紧跟换行符的所有空格
-                        # 注意：这里只跳过原代码中的空格，编辑器自动添加的缩进保留
-                        space_count = 0
-                        while i < len(text) and text[i] == ' ':
-                            space_count += 1
-                            i += 1
-
-                        if space_count > 0:
-                            self.gui.log(f"第{self.line_count}行：跳过了{space_count}个空格")
-
-                        # 继续处理下一个非空格字符
-                        if i < len(text):
-                            # 继续处理当前字符（已经指向非空格字符）
-                            continue
+                            # 合并并发送所有部分
+                            for part in parts:
+                                if part == '{':
+                                    # 输入左括号（转义），等待自动补全，然后删除右括号
+                                    auto.SendKeys('{{}')
+                                    time.sleep(0.1)  # 等待编辑器自动补全右括号
+                                    auto.SendKeys('{Delete}')
+                                elif part:
+                                    # 发送其他部分
+                                    auto.SendKeys(part)
                         else:
-                            break
+                            # 没有左括号，直接发送整行（转义左括号）
+                            escaped_line = line.replace('{', '{{}')
+                            auto.SendKeys(escaped_line)
 
-                    # 输入当前字符
-                    pyautogui.write(char, interval=0.001)
-
-                    # 如果是左括号，等待0.1秒后按Delete键删除编辑器自动补全的右括号
-                    if char == '{':
-                        time.sleep(0.1)  # 等待编辑器完成自动补全
-                        pyautogui.press('delete')  # 删除自动补全的右括号
-
-                    i += 1
-
+                    # 如果不是最后一行，添加换行
+                    if line_index < len(lines) - 1:
+                        auto.SendKeys('{Enter}')
+                        auto.SendKeys('{Home}')   # 删除自动补全的空格
+                        self.line_count += 1
+                        time.sleep(0.05)  # 换行后的短暂等待
             return True
 
         except Exception as e:
@@ -297,12 +275,9 @@ class InputSimulator:
     def finalize_formatting(self):
         """完成代码输入后的格式化操作"""
         try:
-            time.sleep(0.2)
             self.gui.log(f"代码输入完成，共处理了{self.line_count}行")
-
             # 移除ESC键监听
             keyboard.unhook_all()
-
             self.gui.root.after(0, lambda: messagebox.showinfo("提示", "代码输入已完成。"))
             return True
 

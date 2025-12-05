@@ -28,6 +28,7 @@ class LoginWindow:
 
         self.config_manager = ConfigManager()
         self.auth_server_url = "ws://101.200.216.53:8001"  # 服务器地址
+        self.auth_server_url = "ws://101.200.216.53:8001"  # 服务器地址
 
         self.setup_ui()
         self.load_saved_credentials()
@@ -208,7 +209,13 @@ class LoginWindow:
                 'password': password
             }))
             loop.close()
-            self.root.after(0, lambda: self._handle_register_result(result))
+
+            # 注册成功后直接尝试登录
+            if result and result.get('success'):
+                # 注册成功，尝试自动登录
+                self.root.after(0, lambda: self._handle_register_result(result, username, password))
+            else:
+                self.root.after(0, lambda: self._handle_register_result(result))
 
         except Exception as e:
             self.root.after(0, lambda: self._handle_auth_error(f"注册失败: {str(e)}"))
@@ -241,9 +248,8 @@ class LoginWindow:
                 })
 
                 self.status_var.set("登录成功")
-                messagebox.showinfo("成功", "登录成功")
 
-                # 打开主窗口
+                # 直接打开主窗口，不显示成功提示
                 self.open_main_window(result.get('username'), result.get('token'))
             else:
                 self.status_var.set("登录失败")
@@ -251,20 +257,90 @@ class LoginWindow:
         except:
             return
 
-    def _handle_register_result(self, result):
+    def _handle_register_result(self, result, username=None, password=None):
         """处理注册结果"""
-        # 重新启用按钮
-        self.login_button.config(state="normal")
-        self.register_button.config(state="normal")
         try:
             if result.get('success'):
-                self.status_var.set("注册成功")
-                messagebox.showinfo("成功", "注册成功，请登录")
+                # 保存凭据
+                if self.remember_var.get():
+                    credentials = {
+                        'username': username,
+                        'password': password,
+                        'remember': True,
+                        'auto_login': self.auto_login_var.get()
+                    }
+                    self.config_manager.save_credentials(credentials)
+
+                # 注册成功，自动登录
+                self.status_var.set("注册成功，正在自动登录...")
+
+                # 尝试自动登录
+                threading.Thread(target=self._perform_auto_login_after_register,
+                                 args=(username, password), daemon=True).start()
             else:
+                # 重新启用按钮
+                self.login_button.config(state="normal")
+                self.register_button.config(state="normal")
+
                 self.status_var.set("注册失败")
                 messagebox.showerror("错误", result.get('message', '注册失败'))
         except:
-            return
+            # 重新启用按钮
+            self.login_button.config(state="normal")
+            self.register_button.config(state="normal")
+
+    def _perform_auto_login_after_register(self, username, password):
+        """注册成功后自动登录"""
+        try:
+            # 使用asyncio在单独的事件循环中运行异步代码
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            result = loop.run_until_complete(self._send_auth_request({
+                'action': 'login',
+                'username': username,
+                'password': password
+            }))
+
+            loop.close()
+
+            self.root.after(0, lambda: self._handle_auto_login_after_register(result, username))
+
+        except Exception as e:
+            self.root.after(0, lambda: self._handle_auth_error(f"自动登录失败: {str(e)}"))
+            # 重新启用按钮
+            self.root.after(0, lambda: self._enable_buttons())
+
+    def _handle_auto_login_after_register(self, result, username):
+        """处理注册后的自动登录结果"""
+        try:
+            if result.get('success'):
+                # 保存用户会话
+                self.config_manager.save_user_session({
+                    'username': result.get('username'),
+                    'token': result.get('token')
+                })
+
+                self.status_var.set("自动登录成功")
+
+                # 直接打开主窗口，不显示成功提示
+                self.open_main_window(username, result.get('token'))
+            else:
+                # 重新启用按钮
+                self.login_button.config(state="normal")
+                self.register_button.config(state="normal")
+
+                self.status_var.set("自动登录失败")
+                messagebox.showerror("错误", "注册成功，但自动登录失败，请手动登录")
+        except:
+            # 重新启用按钮
+            self.login_button.config(state="normal")
+            self.register_button.config(state="normal")
+
+    def _enable_buttons(self):
+        """启用按钮"""
+        self.login_button.config(state="normal")
+        self.register_button.config(state="normal")
 
     def _handle_auth_error(self, message):
         """处理认证错误"""

@@ -5,7 +5,7 @@ a = Analysis(
     ['C:\\Users\\sunhouyun\\Desktop\\Educoder\\EducoderAutoComplete\\main.py'],
     pathex=[],
     binaries=[],
-    datas=[('EducoderAutoComplete\\config.ini', '.'), ('EducoderAutoComplete\\app.ico', '.'), ('app.ico', '.')],
+    datas=[('EducoderAutoComplete\\app.ico', '.'), ('app.ico', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

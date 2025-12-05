@@ -1,5 +1,6 @@
-﻿import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
+﻿import sys
+import signal
+import tkinter as tk
 import threading
 import queue
 import os
@@ -11,25 +12,32 @@ import urllib.error
 import webbrowser
 import socket
 import time
-import sys
-import signal
 import psutil
 import atexit
+import pystray
 
+from PIL import Image, ImageDraw
+from tkinter import ttk, scrolledtext, messagebox
 from utils.config import ConfigManager
 from core.server import ServerManager
 from gui.input_test import TestInputDialog
 
+TRAY_AVAILABLE = True
+
 
 class EducoderGUI:
-    # 当前应用版本号
-    CURRENT_VERSION = "0.1"  # 请根据实际情况更新版本号
+    CURRENT_VERSION = "0.1"  # 当前应用版本号
 
     def __init__(self, root, username, token, parent_window=None):
         self.root = root
         self.username = username
         self.token = token
         self.parent_window = parent_window  # 保存父窗口引用
+
+        # 系统托盘相关变量
+        self.tray_icon = None
+        self.tray_thread = None
+        self.is_minimized_to_tray = False
 
         # 初始化变量
         self.server_manager = None
@@ -43,14 +51,14 @@ class EducoderGUI:
         atexit.register(self.cleanup_processes)
 
         # 语言选择变量 - 默认C语言
-        self.selected_language = tk.StringVar(value="c")
+        self.selected_language = tk.StringVar(value="C")
 
         # API Key
         self.api_key = "sk-7cc25be93a9540328aa4c104da6c4612"
 
         # 设置窗口属性
         self.root.title("Educoder助手")
-        self.root.geometry("850x550")  # 增加宽度以适应语言选择
+        self.root.geometry("850x550")   # 增加宽度以适应语言选择
         self.root.resizable(True, True)
 
         # 设置关闭窗口的处理
@@ -63,6 +71,9 @@ class EducoderGUI:
         self.root.deiconify()
         self.root.lift()
         self.root.focus_force()
+
+        # 程序启动时自动启动服务器
+        self.auto_start_server()
 
     def setup_ui(self):
         """设置用户界面"""
@@ -100,7 +111,7 @@ class EducoderGUI:
         # 复制粘贴模式选项
         ttk.Checkbutton(
             options_frame,
-            text="允许复制粘贴（一次性输入完整代码）",
+            text="启用复制粘贴模式（一次性输入完整代码）",
             variable=self.use_copy_paste
         ).pack(side=tk.LEFT)
 
@@ -111,7 +122,7 @@ class EducoderGUI:
         ttk.Label(lang_frame, text="选择编程语言:").pack(side=tk.LEFT, padx=(0, 5))
 
         # 定义语言选项
-        languages = ["c", "c++", "java", "python", "javascript", "c#"]
+        languages = ["C", "C++", "Java", "Python", "Javascript", "C#"]
         self.language_combo = ttk.Combobox(
             lang_frame,
             textvariable=self.selected_language,
@@ -235,7 +246,7 @@ class EducoderGUI:
         """检测更新的线程函数"""
         try:
             # 获取最新版本号
-            version_url = "http://101.200.216.53/educoder/version.txt"
+            version_url = "http://www.yhsun.cn/educoder/version.txt"
 
             # 设置请求头，模拟浏览器请求
             headers = {
@@ -273,8 +284,8 @@ class EducoderGUI:
             # 比较版本号
             if self._compare_version(latest_version, self.CURRENT_VERSION) > 0:
                 # 有新版本，获取更新内容和下载地址
-                content_url = "http://101.200.216.53/educoder/content.txt"
-                download_url = "http://101.200.216.53/educoder/download.txt"
+                content_url = "http://www.yhsun.cn/educoder/content.txt"
+                download_url = "http://www.yhsun.cn/educoder/download.txt"
 
                 # 获取更新内容
                 req = urllib.request.Request(content_url, headers=headers)
@@ -466,15 +477,25 @@ class EducoderGUI:
 
     def start_server(self):
         """启动WebSocket服务器"""
-        # 使用硬编码的API Key
-        self.server_manager = ServerManager(self)
-        if self.server_manager.start():
-            self.start_button.config(state="disabled")
-            self.stop_button.config(state="normal")
-            self.server_status_var.set("服务器状态: 启动中...")
-            self.status_var.set("服务器启动中...")
-            self.log("正在启动WebSocket服务器...")
-            self.log(f"当前语言设置: {self.selected_language.get().upper()}")
+        try:
+            # 使用硬编码的API Key
+            self.server_manager = ServerManager(self)
+            if self.server_manager.start():
+                self.start_button.config(state="disabled")
+                self.stop_button.config(state="normal")
+                self.server_status_var.set("服务器状态: 启动中...")
+                self.status_var.set("服务器启动中...")
+                self.log("正在启动WebSocket服务器...")
+                self.log(f"当前语言设置: {self.selected_language.get().upper()}")
+                return True
+            else:
+                self.log("启动服务器失败")
+                self.status_var.set("启动服务器失败")
+                return False
+        except Exception as e:
+            self.log(f"启动服务器时发生错误: {e}")
+            self.status_var.set("启动服务器失败")
+            return False
 
     def stop_server(self):
         """停止WebSocket服务器"""
@@ -519,6 +540,75 @@ class EducoderGUI:
         except:
             pass  # 忽略登出错误
 
+    def create_tray_icon(self):
+        """创建系统托盘图标，使用app.ico文件"""
+        if not TRAY_AVAILABLE:
+            return None
+
+        try:
+            # 尝试从app.ico文件加载图标
+            icon_path = "app.ico"
+
+            # 加载ICO文件
+            image = Image.open(icon_path)
+            # 调整图标大小到合适的尺寸（系统托盘通常使用16x16或32x32）
+            image = image.resize((32, 32), Image.Resampling.LANCZOS)
+
+            # 创建菜单项
+            menu_items = [
+                pystray.MenuItem("显示主窗口", self.restore_from_tray),
+                pystray.MenuItem("退出程序", self.quit_program)
+            ]
+
+            # 创建托盘图标
+            tray_icon = pystray.Icon("educoder_icon", image, "Educoder助手", menu_items)
+
+            return tray_icon
+
+        except Exception as e:
+            self.log(f"创建系统托盘图标失败: {e}")
+            return None
+
+    def minimize_to_tray(self):
+        """最小化到系统托盘"""
+        if not TRAY_AVAILABLE:
+            self.log("系统托盘功能不可用，将直接退出程序")
+            self.real_close()
+            return
+
+        if not self.is_minimized_to_tray:
+            self.is_minimized_to_tray = True
+            self.log("程序已最小化到系统托盘")
+
+            # 隐藏窗口
+            self.root.withdraw()
+
+            # 创建并运行系统托盘图标（在新线程中）
+            if self.tray_icon is None:
+                self.tray_icon = self.create_tray_icon()
+
+            if self.tray_icon is not None:
+                # 在新线程中运行托盘图标
+                self.tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
+                self.tray_thread.start()
+
+    def restore_from_tray(self):
+        """从系统托盘恢复窗口"""
+        if self.is_minimized_to_tray:
+            self.is_minimized_to_tray = False
+
+            # 停止系统托盘图标
+            if self.tray_icon is not None:
+                self.tray_icon.stop()
+                self.tray_icon = None
+                self.tray_thread = None
+
+            # 显示窗口
+            self.root.deiconify()
+            self.root.lift()
+            self.root.focus_force()
+            self.log("程序已从系统托盘恢复")
+
     def cleanup_processes(self):
         """清理所有进程"""
         if hasattr(self, 'is_closing') and self.is_closing:
@@ -561,12 +651,30 @@ class EducoderGUI:
             self.log(f"清理进程时出错: {e}")
 
     def on_close(self):
-        """关闭窗口时的处理"""
+        """关闭窗口时的处理 - 改为最小化到系统托盘"""
+        if self.is_closing:
+            return
+
+        # 如果系统托盘功能不可用，则直接退出
+        if not TRAY_AVAILABLE:
+            self.real_close()
+            return
+
+        # 否则最小化到系统托盘
+        self.minimize_to_tray()
+
+    def real_close(self):
+        """真正的关闭程序"""
         if self.is_closing:
             return
 
         self.is_closing = True
         self.log("正在关闭应用...")
+
+        # 停止系统托盘图标
+        if self.tray_icon is not None:
+            self.tray_icon.stop()
+            self.tray_icon = None
 
         # 停止服务器
         if self.server_manager:
@@ -591,6 +699,10 @@ class EducoderGUI:
         # 强制退出程序
         os._exit(0)
 
+    def quit_program(self):
+        """从系统托盘菜单退出程序"""
+        self.real_close()
+
     def update_status(self, message):
         """更新状态信息"""
         self.status_var.set(message)
@@ -598,3 +710,25 @@ class EducoderGUI:
     def update_server_status(self, message):
         """更新服务器状态"""
         self.server_status_var.set(message)
+
+    def auto_start_server(self):
+        """程序启动时自动启动服务器"""
+        self.log("正在自动启动服务器...")
+
+        # 延迟500毫秒启动，确保UI完全加载
+        self.root.after(500, self._auto_start_server_task)
+
+    def _auto_start_server_task(self):
+        """自动启动服务器的实际任务"""
+        try:
+            # 模拟点击启动按钮
+            if self.start_server():
+                self.log("服务器自动启动成功")
+            else:
+                self.log("服务器自动启动失败")
+                # 如果自动启动失败，可以询问用户是否重试
+                if messagebox.askretrycancel("启动失败", "服务器自动启动失败，是否重试？"):
+                    self.auto_start_server()
+        except Exception as e:
+            self.log(f"自动启动服务器时发生错误: {e}")
+            messagebox.showerror("启动错误", f"自动启动服务器时发生错误:\n{e}")
