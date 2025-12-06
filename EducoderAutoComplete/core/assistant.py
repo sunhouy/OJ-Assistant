@@ -179,20 +179,13 @@ class EducoderAssistant:
             current_code = data.get('currentCode', '')
             has_error = data.get('has_error', False)  # 获取前端传来的错误标记
 
-            # 分析测试结果
-            has_failures, failures = self._analyze_educoder_test_results(test_text)
+            # 直接使用前端传来的错误标记
+            should_fix = has_error
 
-            # 修改：优先使用前端传来的错误标记，如果前端没有提供，则使用分析结果
-            if has_error is not None:
-                should_fix = has_error
-            else:
-                should_fix = has_failures
-
-            # 保存测试失败信息
-            self.test_failures = failures
+            # 保存测试失败信息（直接使用test_results）
+            self.test_failures = test_results
 
             if should_fix:
-                failure_count = len(failures) if failures else 0
                 self.gui.log(f"检测到测试失败，准备纠错")
 
                 # 检查是否超过最大重试次数
@@ -201,8 +194,8 @@ class EducoderAssistant:
                         "type": "test_results_response",
                         "success": True,
                         "has_failures": True,
-                        "failure_count": failure_count,
-                        "failures": failures,
+                        "failure_count": 0,
+                        "failures": [],
                         "test_results_text": test_text,
                         "message": f"已达到最大重试次数({self.max_retries}次)，请手动检查代码"
                     }, ensure_ascii=False))
@@ -220,7 +213,7 @@ class EducoderAssistant:
                 # 开始纠错流程
                 revised_code = await self._generate_revised_code_with_failures(
                     self.last_question,
-                    failures,
+                    test_text,  # 直接使用test_text作为错误内容
                     current_code
                 )
 
@@ -236,7 +229,7 @@ class EducoderAssistant:
                         "type": "code_revision",
                         "revised_code": revised_code,
                         "retry_count": self.retry_count,
-                        "failure_count": failure_count,
+                        "failure_count": 0,
                         "revision_notes": f"第{self.retry_count}次纠错，修正了测试失败",
                         "timestamp": datetime.now().isoformat()
                     }, ensure_ascii=False))
@@ -413,183 +406,13 @@ class EducoderAssistant:
 
         return chunks
 
-    def _analyze_educoder_test_results(self, test_text):
-        """分析Educoder测试结果"""
-        if not test_text:
-            return False, []
-
-        # 检查是否包含特定的错误标记
-        error_markers = [
-            '测试结果不匹配。详情如下：',
-            '测试失败',
-            '不通过',
-            '错误',
-            '失败',
-            '×',
-            '✗',
-            '不正确',
-            '测试失败详情：'  # 新增的错误标记
-        ]
-
-        # 首先检查是否有明显的错误标记
-        has_error_marker = False
-        for marker in error_markers:
-            if marker in test_text:
-                has_error_marker = True
-                break
-
-        if not has_error_marker:
-            # 如果没有明显的错误标记，检查是否有测试集且实际输出与预期输出不匹配
-            test_set_pattern = r'测试集\s*(\d+)([\s\S]*?)(?=测试集\s*\d+|$)'
-            matches = list(re.finditer(test_set_pattern, test_text))
-
-            if not matches:
-                return False, []
-
-            failures = []
-
-            for match in matches:
-                test_set_number = match.group(1)
-                test_set_content = match.group(2)
-
-                # 检查是否失败
-                if self._is_test_set_failed(test_set_content):
-                    # 提取测试输入
-                    test_input_match = re.search(r'测试输入\s*[:：]\s*([\s\S]*?)(?=预期输出|实际输出|$)',
-                                                 test_set_content)
-                    test_input = test_input_match.group(1).strip() if test_input_match else ""
-
-                    # 提取预期输出
-                    expected_match = re.search(r'预期输出\s*[:：]\s*([\s\S]*?)(?=实际输出|$)', test_set_content)
-                    expected_output = expected_match.group(1).strip() if expected_match else ""
-
-                    # 提取实际输出
-                    actual_match = re.search(r'实际输出\s*[:：]\s*([\s\S]*?)(?=$)', test_set_content)
-                    actual_output = actual_match.group(1).strip() if actual_match else ""
-
-                    # 确定错误类型
-                    error_type = self._determine_educoder_error_type(expected_output, actual_output, test_set_content)
-
-                    failures.append({
-                        'test_set_number': test_set_number,
-                        'test_input': test_input,
-                        'expected_output': expected_output,
-                        'actual_output': actual_output,
-                        'error_type': error_type,
-                        'full_context': test_set_content[:500]
-                    })
-
-            return len(failures) > 0, failures
-        else:
-            # 如果有错误标记，尝试提取具体的失败信息
-            test_set_pattern = r'测试集\s*(\d+)([\s\S]*?)(?=测试集\s*\d+|$)'
-            matches = list(re.finditer(test_set_pattern, test_text))
-
-            failures = []
-
-            for match in matches:
-                test_set_number = match.group(1)
-                test_set_content = match.group(2)
-
-                # 检查是否失败
-                if self._is_test_set_failed(test_set_content):
-                    # 提取测试输入
-                    test_input_match = re.search(r'测试输入\s*[:：]\s*([\s\S]*?)(?=预期输出|实际输出|$)',
-                                                 test_set_content)
-                    test_input = test_input_match.group(1).strip() if test_input_match else ""
-
-                    # 提取预期输出
-                    expected_match = re.search(r'预期输出\s*[:：]\s*([\s\S]*?)(?=实际输出|$)', test_set_content)
-                    expected_output = expected_match.group(1).strip() if expected_match else ""
-
-                    # 提取实际输出
-                    actual_match = re.search(r'实际输出\s*[:：]\s*([\s\S]*?)(?=$)', test_set_content)
-                    actual_output = actual_match.group(1).strip() if actual_match else ""
-
-                    # 确定错误类型
-                    error_type = self._determine_educoder_error_type(expected_output, actual_output, test_set_content)
-
-                    failures.append({
-                        'test_set_number': test_set_number,
-                        'test_input': test_input,
-                        'expected_output': expected_output,
-                        'actual_output': actual_output,
-                        'error_type': error_type,
-                        'full_context': test_set_content[:500]
-                    })
-
-            # 即使没有提取到具体的测试集信息，只要有错误标记就返回有失败
-            if failures:
-                return True, failures
-            else:
-                # 创建一个通用的失败信息
-                failures.append({
-                    'test_set_number': '未知',
-                    'test_input': '',
-                    'expected_output': '',
-                    'actual_output': '',
-                    'error_type': '测试不匹配',
-                    'full_context': test_text[:500]
-                })
-                return True, failures
-
-    def _is_test_set_failed(self, test_set_content):
-        """判断测试集是否失败"""
-        # 检查失败标记
-        failure_markers = ['×', '✗', '失败', '不正确', '错误', 'error', 'fail', '不通过']
-
-        for marker in failure_markers:
-            if marker in test_set_content:
-                return True
-
-        # 检查实际输出和预期输出是否不同
-        expected_match = re.search(r'预期输出\s*[:：]\s*([\s\S]*?)(?=实际输出|$)', test_set_content)
-        actual_match = re.search(r'实际输出\s*[:：]\s*([\s\S]*?)(?=$)', test_set_content)
-
-        if expected_match and actual_match:
-            expected = expected_match.group(1).strip()
-            actual = actual_match.group(1).strip()
-
-            # 简单比较，可以改进为更复杂的比较
-            if expected != actual:
-                return True
-
-        return False
-
-    def _determine_educoder_error_type(self, expected_output, actual_output, test_set_content):
-        """确定Educoder错误类型"""
-        if not actual_output:
-            return '无输出'
-
-        if '错误' in test_set_content or 'error' in test_set_content.lower():
-            return '运行时错误'
-
-        if not expected_output:
-            return '无预期输出'
-
-        # 检查是否为格式错误
-        expected_lines = expected_output.count('\n') + 1
-        actual_lines = actual_output.count('\n') + 1
-        if expected_lines != actual_lines:
-            return '格式错误'
-
-        # 检查是否为空输出
-        if actual_output.strip() == '':
-            return '空输出'
-
-        # 检查是否为部分匹配
-        if expected_output in actual_output or actual_output in expected_output:
-            return '部分匹配'
-
-        return '输出不匹配'
-
-    async def _generate_revised_code_with_failures(self, original_question, failures, previous_code):
+    async def _generate_revised_code_with_failures(self, original_question, test_results_text, previous_code):
         """根据测试失败重新生成代码"""
         try:
             self.gui.log(f"根据测试失败重新生成{self.current_language.upper()}代码，第{self.retry_count}次重试")
 
             # 构建包含失败信息的提示词
-            prompt = self._build_retry_prompt(original_question, failures, previous_code)
+            prompt = self._build_retry_prompt(original_question, test_results_text, previous_code)
 
             response = await self.client.chat.completions.create(
                 model="qwen3-coder-plus",
@@ -621,7 +444,7 @@ class EducoderAssistant:
             self.gui.log(f"代码重新生成失败: {e}")
             return None
 
-    def _build_retry_prompt(self, original_question, failures, previous_code):
+    def _build_retry_prompt(self, original_question, test_results_text, previous_code):
         """构建重试提示词"""
         language_mapping = {
             "C": "C语言",
@@ -634,18 +457,6 @@ class EducoderAssistant:
 
         lang_name = language_mapping.get(self.current_language, self.current_language.upper())
 
-        # 构建失败详情部分
-        failure_details = ""
-        if failures and len(failures) > 0:
-            for i, failure in enumerate(failures[:3]):  # 最多使用3个失败案例
-                failure_details += f"\n失败案例 {i + 1} (测试集 {failure.get('test_set_number', '未知')}):\n"
-                failure_details += f"测试输入: {failure.get('test_input', '')}\n"
-                failure_details += f"预期输出: {failure.get('expected_output', '')}\n"
-                failure_details += f"实际输出: {failure.get('actual_output', '')}\n"
-                failure_details += f"错误类型: {failure.get('error_type', '')}\n"
-        else:
-            failure_details = "\n测试结果显示代码有错误，但没有提取到具体的失败信息。"
-
         # 构建提示词
         prompt = f"""
 原始题目要求：
@@ -655,7 +466,7 @@ class EducoderAssistant:
 {previous_code}
 
 测试失败详情：
-{failure_details}
+{test_results_text}
 
 请根据以上信息，修复代码中的错误，生成新的{lang_name}代码。
 
