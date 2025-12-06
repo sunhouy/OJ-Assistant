@@ -1,5 +1,6 @@
 ﻿import tkinter as tk
 from tkinter import ttk
+from tkinter import messagebox  # 添加这行导入
 import configparser
 import os
 import webbrowser
@@ -77,25 +78,18 @@ class FirstRunDialog:
                         foreground='#e74c3c',
                         padding=5)
 
-        # 主按钮样式
-        style.configure('Primary.TButton',
-                        font=('微软雅黑', 11, 'bold'),
-                        padding=10,
-                        background='#3498db',
-                        foreground='white')
+        # 统一按钮样式 - 黑色文字
+        style.configure('Action.TButton',
+                        font=('微软雅黑', 12, 'bold'),  # 增大字体使其更醒目
+                        padding=12,
+                        background='#ffffff',  # 白色背景
+                        foreground='#000000',  # 黑色文字
+                        borderwidth=2,
+                        relief='raised')
 
-        style.map('Primary.TButton',
-                  background=[('active', '#2980b9')])
-
-        # 次要按钮样式
-        style.configure('Secondary.TButton',
-                        font=('微软雅黑', 10, 'bold'),
-                        padding=8,
-                        background='#2ecc71',
-                        foreground='white')
-
-        style.map('Secondary.TButton',
-                  background=[('active', '#27ae60')])
+        style.map('Action.TButton',
+                  background=[('active', '#f0f0f0'), ('pressed', '#e0e0e0')],
+                  foreground=[('active', '#000000'), ('pressed', '#000000')])
 
         # 配置复选框样式
         style.configure('Custom.TCheckbutton',
@@ -202,9 +196,7 @@ class FirstRunDialog:
         steps_section.pack(anchor='w', pady=(0, 10))
 
         steps_text = """1. 选择您要安装扩展的浏览器
-2. 点击下方"跳转安装扩展"按钮
-3. 在新打开的页面中点击"添加扩展"按钮
-4. 安装完成后刷新头歌平台页面"""
+2. 点击下方"跳转安装扩展"按钮"""
 
         steps_label = ttk.Label(
             scrollable_frame,
@@ -269,7 +261,7 @@ class FirstRunDialog:
                                 fg='#e74c3c')
         warning_icon.pack(side='left', padx=(0, 10))
 
-        warning_text = """ """   # 重要提示
+        warning_text = """本应用仅供学习交流使用，不得用于商业和非法用途。"""   # 重要提示
 
         warning_label = ttk.Label(warning_frame,
                                   text=warning_text,
@@ -297,25 +289,31 @@ class FirstRunDialog:
         right_frame = ttk.Frame(bottom_frame)
         right_frame.pack(side='right')
 
+        # 创建统一的按钮容器，确保两个按钮大小一致
+        buttons_frame = ttk.Frame(right_frame)
+        buttons_frame.pack(side='right')
+
         # 跳转安装扩展按钮
         install_button = ttk.Button(
-            right_frame,
+            buttons_frame,
             text="跳转安装扩展",
             command=self.open_extension_install,
-            style='Secondary.TButton',
-            cursor='hand2'
+            style='Action.TButton',
+            cursor='hand2',
+            width=15  # 固定宽度确保两个按钮一样大
         )
-        install_button.pack(side='left', padx=5)
+        install_button.pack(side='left', padx=(0, 5))
 
         # 我已安装扩展按钮
         self.ok_button = ttk.Button(
-            right_frame,
+            buttons_frame,
             text="我已安装扩展",
             command=self.on_confirm,
-            style='Primary.TButton',
-            cursor='hand2'
+            style='Action.TButton',
+            cursor='hand2',
+            width=15  # 固定宽度确保两个按钮一样大
         )
-        self.ok_button.pack(side='left', padx=5)
+        self.ok_button.pack(side='left', padx=(5, 0))
 
         # 绑定鼠标滚轮滚动
         def on_mousewheel(event):
@@ -337,7 +335,8 @@ class FirstRunDialog:
         # 创建一个简单的选择对话框
         browser_dialog = tk.Toplevel(self.dialog)
         browser_dialog.title("选择浏览器")
-        browser_dialog.geometry("400x200")
+        browser_dialog.geometry("400x400")
+        browser_dialog.configure(bg='white')
         browser_dialog.transient(self.dialog)
         browser_dialog.grab_set()
 
@@ -345,7 +344,7 @@ class FirstRunDialog:
         browser_dialog.update_idletasks()
         x = self.dialog.winfo_x() + (self.dialog.winfo_width() - 400) // 2
         y = self.dialog.winfo_y() + (self.dialog.winfo_height() - 200) // 2
-        browser_dialog.geometry(f"400x200+{x}+{y}")
+        browser_dialog.geometry(f"400x400+{x}+{y}")
 
         # 内容
         content_frame = ttk.Frame(browser_dialog, padding="20")
@@ -360,7 +359,7 @@ class FirstRunDialog:
             content_frame,
             text="Google Chrome",
             command=lambda: self.open_chrome_install(browser_dialog),
-            style='Primary.TButton',
+            style='Action.TButton',
             width=20
         )
         chrome_button.pack(pady=5)
@@ -370,7 +369,7 @@ class FirstRunDialog:
             content_frame,
             text="Microsoft Edge",
             command=lambda: self.open_edge_install(browser_dialog),
-            style='Primary.TButton',
+            style='Action.TButton',
             width=20
         )
         edge_button.pack(pady=5)
@@ -380,6 +379,7 @@ class FirstRunDialog:
             content_frame,
             text="取消",
             command=browser_dialog.destroy,
+            style='Action.TButton',
             width=10
         )
         cancel_button.pack(pady=(10, 0))

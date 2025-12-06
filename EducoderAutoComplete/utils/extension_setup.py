@@ -24,7 +24,7 @@ class BrowserCheckerApp:
 
         # 设置样式
         style = ttk.Style()
-        style.theme_use('clam')
+        style.theme_use('vista')
 
         # 主框架
         main_frame = ttk.Frame(root, padding="20")

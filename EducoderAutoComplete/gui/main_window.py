@@ -15,6 +15,8 @@ import atexit
 import pystickynote
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
 
 from PIL import Image, ImageDraw
 from tkinter import ttk, scrolledtext, messagebox
@@ -34,10 +36,30 @@ class EducoderGUI:
         self.token = token
         self.parent_window = parent_window  # 保存父窗口引用
 
+        # 单实例相关变量
+        self.lock_socket = None
+        self.lock_file = None
+        self.is_closing = False  # 标记是否正在关闭
+
         # 系统托盘相关变量
         self.tray_icon = None
         self.tray_thread = None
         self.is_minimized_to_tray = False
+
+        # 单实例检查
+        if self.check_other_instance():
+            # 如果已有实例运行，激活它并退出当前进程
+            self.activate_existing_instance()
+            if root:
+                root.destroy()
+            return  # 直接返回，不继续初始化
+
+        # 设置单实例锁
+        if not self.setup_single_instance():
+            if messagebox and root:
+                messagebox.showerror("错误", "无法创建单实例锁，程序可能已经运行")
+                root.destroy()
+            return
 
         # 初始化变量
         self.server_manager = None
@@ -45,7 +67,6 @@ class EducoderGUI:
         self.use_copy_paste = tk.BooleanVar(value=False)
         self.config_manager = ConfigManager()
         self.show_log_var = tk.BooleanVar(value=False)  # 默认不显示日志
-        self.is_closing = False  # 标记是否正在关闭
 
         # 注册退出时的清理函数
         atexit.register(self.cleanup_processes)
@@ -74,6 +95,125 @@ class EducoderGUI:
 
         # 程序启动时自动启动服务器
         self.auto_start_server()
+
+    def check_other_instance(self):
+        """检查是否有其他实例正在运行"""
+        try:
+            # 方法1: 使用socket连接
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(0.5)
+            result = sock.connect_ex(('localhost', 9000))
+            sock.close()
+            if result == 0:
+                return True
+        except:
+            pass
+
+        # 方法2: 检查进程
+        current_pid = os.getpid()
+        current_name = os.path.basename(sys.argv[0])
+
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.pid == current_pid:
+                    continue
+
+                # 检查是否是相同的Python脚本
+                cmdline = proc.cmdline()
+                if cmdline and len(cmdline) > 0:
+                    if current_name in cmdline[0] or "python" in proc.name().lower():
+                        if len(cmdline) > 1 and "educoder" in " ".join(cmdline).lower():
+                            return True
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+
+        return False
+
+    def setup_single_instance(self):
+        """设置单实例锁"""
+        try:
+            # 创建socket锁
+            self.lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.lock_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.lock_socket.bind(('localhost', 9000))
+            self.lock_socket.listen(1)
+
+            # 创建文件锁
+            temp_dir = tempfile.gettempdir()
+            self.lock_file = Path(temp_dir) / "educoder_assistant.lock"
+
+            # 写入当前进程ID
+            with open(self.lock_file, 'w') as f:
+                f.write(str(os.getpid()))
+
+            # 启动socket监听线程
+            threading.Thread(target=self.listen_for_activation, daemon=True).start()
+
+            return True
+        except Exception as e:
+            print(f"设置单实例锁失败: {e}")
+            return False
+
+    def listen_for_activation(self):
+        """监听激活请求"""
+        if not self.lock_socket:
+            return
+
+        while not self.is_closing:
+            try:
+                conn, addr = self.lock_socket.accept()
+                conn.settimeout(2.0)
+
+                # 接收到激活请求
+                data = conn.recv(1024)
+                if data and b"ACTIVATE" in data:
+                    # 在GUI线程中恢复窗口
+                    if self.root:
+                        self.root.after(0, self.restore_from_tray)
+
+                conn.close()
+            except socket.timeout:
+                continue
+            except Exception as e:
+                if not self.is_closing:
+                    print(f"监听激活请求出错: {e}")
+                break
+
+    def activate_existing_instance(self):
+        """激活已存在的实例"""
+        try:
+            # 连接到正在运行的实例
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2.0)
+            sock.connect(('localhost', 9000))
+            sock.send(b"ACTIVATE")
+            sock.close()
+
+            if messagebox:
+                messagebox.showinfo("提示", "Educoder助手已经在后台运行，正在激活窗口...")
+            return True
+        except Exception as e:
+            print(f"激活已存在实例失败: {e}")
+            return False
+
+    def cleanup_single_instance(self):
+        """清理单实例锁"""
+        self.is_closing = True
+
+        # 关闭socket
+        if self.lock_socket:
+            try:
+                self.lock_socket.close()
+            except:
+                pass
+            self.lock_socket = None
+
+        # 删除文件锁
+        if self.lock_file and os.path.exists(self.lock_file):
+            try:
+                os.remove(self.lock_file)
+            except:
+                pass
 
     def setup_ui(self):
         """设置用户界面"""
@@ -243,9 +383,9 @@ class EducoderGUI:
                 self.status_var.set("扩展安装工具已打开")
 
             else:
-                # 如果找不到文件，使用我们之前修改的版本
-                self.log("未找到extension_setup.py文件，使用内置浏览器检测工具")
-                self.open_builtin_extension_setup()
+                # 如果找不到文件，显示简单的扩展安装说明
+                self.log("未找到extension_setup.py文件，显示扩展安装说明")
+                self.show_extension_instructions()
 
         except Exception as e:
             self.log(f"打开扩展安装工具时出错: {e}")
@@ -275,23 +415,13 @@ class EducoderGUI:
 
         return None
 
-    def open_builtin_extension_setup(self):
-        """打开内置的浏览器检测和扩展安装工具"""
+    def show_extension_instructions(self):
+        """显示扩展安装说明"""
         try:
             # 创建一个新的顶级窗口
             extension_window = tk.Toplevel(self.root)
-            extension_window.title("浏览器扩展安装工具")
-            extension_window.geometry("500x550")
-
-            # 设置窗口图标（如果有的话）
-            try:
-                extension_window.iconbitmap(default='icon.ico')
-            except:
-                pass
-
-            # 设置样式
-            style = ttk.Style(extension_window)
-            style.theme_use('clam')
+            extension_window.title("浏览器扩展安装说明")
+            extension_window.geometry("500x400")
 
             # 主框架
             main_frame = ttk.Frame(extension_window, padding="20")
@@ -300,256 +430,78 @@ class EducoderGUI:
             # 标题
             title_label = ttk.Label(
                 main_frame,
-                text="浏览器检测与扩展安装工具",
+                text="浏览器扩展安装说明",
                 font=("微软雅黑", 16, "bold")
             )
             title_label.pack(pady=(0, 20))
 
-            # 浏览器状态显示区域
-            status_frame = ttk.LabelFrame(main_frame, text="浏览器检测结果", padding="15")
-            status_frame.pack(fill=tk.X, pady=(0, 20))
+            # 说明文本区域
+            instructions_text = """
+请按照以下步骤安装浏览器扩展：
 
-            # Chrome状态
-            chrome_frame = ttk.Frame(status_frame)
-            chrome_frame.pack(fill=tk.X, pady=(0, 10))
+1. 打开浏览器（Chrome或Edge）
 
-            chrome_icon_label = ttk.Label(
-                chrome_frame,
-                text="⚫",
-                font=("Arial", 20),
-                foreground="#4285F4"
+2. 根据浏览器类型打开对应链接：
+   - Chrome浏览器: http://yhsun.cn/educoder/chrome.html
+   - Edge浏览器: http://yhsun.cn/educoder/edge.html
+
+3. 按照页面上的指示完成扩展安装
+
+4. 安装完成后，刷新Educoder页面即可使用
+
+注意：
+- 请确保已安装并运行本助手程序
+- 扩展安装需要浏览器权限，请允许相关提示
+- 如果遇到问题，请重新启动浏览器
+"""
+
+            # 创建滚动文本区域
+            text_frame = ttk.Frame(main_frame)
+            text_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+
+            text_widget = scrolledtext.ScrolledText(
+                text_frame,
+                wrap=tk.WORD,
+                font=("微软雅黑", 10)
             )
-            chrome_icon_label.pack(side=tk.LEFT, padx=(0, 10))
-
-            chrome_info_frame = ttk.Frame(chrome_frame)
-            chrome_info_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-            chrome_status_label = ttk.Label(
-                chrome_info_frame,
-                text="Chrome浏览器",
-                font=("微软雅黑", 10, "bold")
-            )
-            chrome_status_label.pack(anchor=tk.W)
-
-            chrome_detail_label = ttk.Label(
-                chrome_info_frame,
-                text="等待检测...",
-                font=("微软雅黑", 9)
-            )
-            chrome_detail_label.pack(anchor=tk.W)
-
-            # Edge状态
-            edge_frame = ttk.Frame(status_frame)
-            edge_frame.pack(fill=tk.X)
-
-            edge_icon_label = ttk.Label(
-                edge_frame,
-                text="⚫",
-                font=("Arial", 20),
-                foreground="#0078D7"
-            )
-            edge_icon_label.pack(side=tk.LEFT, padx=(0, 10))
-
-            edge_info_frame = ttk.Frame(edge_frame)
-            edge_info_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-            edge_status_label = ttk.Label(
-                edge_info_frame,
-                text="Edge浏览器",
-                font=("微软雅黑", 10, "bold")
-            )
-            edge_status_label.pack(anchor=tk.W)
-
-            edge_detail_label = ttk.Label(
-                edge_info_frame,
-                text="等待检测...",
-                font=("微软雅黑", 9)
-            )
-            edge_detail_label.pack(anchor=tk.W)
-
-            # 扩展安装选择区域
-            install_frame = ttk.LabelFrame(main_frame, text="扩展安装选项", padding="10")
-            install_frame.pack(fill=tk.X, pady=(0, 20))
-
-            # 浏览器选择标签
-            ttk.Label(
-                install_frame,
-                text="选择要安装扩展的浏览器:",
-                font=("微软雅黑", 9)
-            ).pack(anchor=tk.W, pady=(0, 5))
-
-            # 浏览器选择下拉框
-            browser_var = tk.StringVar(value="请选择浏览器")
-            browser_combo = ttk.Combobox(
-                install_frame,
-                textvariable=browser_var,
-                state="readonly",
-                font=("微软雅黑", 10),
-                width=25
-            )
-            browser_combo.pack(anchor=tk.W, pady=(0, 10))
-
-            # 安装URL显示
-            url_frame = ttk.Frame(install_frame)
-            url_frame.pack(fill=tk.X, pady=(0, 10))
-
-            ttk.Label(
-                url_frame,
-                text="安装页面:",
-                font=("微软雅黑", 9)
-            ).pack(side=tk.LEFT)
-
-            url_label = ttk.Label(
-                url_frame,
-                text="请先选择浏览器",
-                font=("微软雅黑", 9),
-                foreground="#0078D7"
-            )
-            url_label.pack(side=tk.LEFT, padx=(5, 0))
+            text_widget.pack(fill=tk.BOTH, expand=True)
+            text_widget.insert('1.0', instructions_text)
+            text_widget.config(state='disabled')
 
             # 按钮框架
             button_frame = ttk.Frame(main_frame)
             button_frame.pack(fill=tk.X)
 
-            # 安装URL映射
-            install_urls = {
-                "Chrome浏览器": "http://yhsun.cn/educoder/chrome.html",
-                "Edge浏览器": "http://yhsun.cn/educoder/edge.html"
-            }
+            # 复制Chrome链接按钮
+            def copy_chrome_link():
+                self.root.clipboard_clear()
+                self.root.clipboard_append("http://yhsun.cn/educoder/chrome.html")
+                messagebox.showinfo("成功", "Chrome扩展链接已复制到剪贴板", parent=extension_window)
 
-            def detect_browsers():
-                """检测浏览器安装状态"""
-                browsers = {"chrome": {"installed": False}, "edge": {"installed": False}}
-
-                # 检测Chrome
-                chrome_installed = self.check_chrome_installed()
-                browsers["chrome"]["installed"] = chrome_installed
-
-                # 检测Edge
-                edge_installed = self.check_edge_installed()
-                browsers["edge"]["installed"] = edge_installed
-
-                # 更新UI显示
-                if chrome_installed:
-                    chrome_icon_label.config(text="✅")
-                    chrome_status_label.config(text="Chrome浏览器 (已安装)", foreground="green")
-                    chrome_detail_label.config(text="Chrome浏览器已安装")
-                else:
-                    chrome_icon_label.config(text="❌")
-                    chrome_status_label.config(text="Chrome浏览器 (未安装)", foreground="red")
-                    chrome_detail_label.config(text="未找到Chrome浏览器")
-
-                if edge_installed:
-                    edge_icon_label.config(text="✅")
-                    edge_status_label.config(text="Edge浏览器 (已安装)", foreground="green")
-                    edge_detail_label.config(text="Edge浏览器已安装")
-                else:
-                    edge_icon_label.config(text="❌")
-                    edge_status_label.config(text="Edge浏览器 (未安装)", foreground="red")
-                    edge_detail_label.config(text="未找到Edge浏览器")
-
-                # 更新下拉选择框
-                installed_browsers = []
-                if chrome_installed:
-                    installed_browsers.append("Chrome浏览器")
-                if edge_installed:
-                    installed_browsers.append("Edge浏览器")
-
-                if installed_browsers:
-                    browser_combo['values'] = installed_browsers
-                    if len(installed_browsers) == 1:
-                        browser_var.set(installed_browsers[0])
-                        on_browser_select(None)
-                else:
-                    browser_combo['values'] = []
-                    browser_var.set("未找到可用浏览器")
-
-                return browsers
-
-            def on_browser_select(event):
-                """浏览器选择事件处理"""
-                selected = browser_var.get()
-
-                if selected == "Chrome浏览器":
-                    url_label.config(text=install_urls["Chrome浏览器"])
-                elif selected == "Edge浏览器":
-                    url_label.config(text=install_urls["Edge浏览器"])
-                else:
-                    url_label.config(text="请先选择浏览器")
-
-            def install_extension():
-                """安装扩展"""
-                selected = browser_var.get()
-
-                if selected in install_urls:
-                    url = install_urls[selected]
-                    browser_name = selected.replace("浏览器", "")
-
-                    # 询问确认
-                    response = messagebox.askyesno(
-                        "确认安装",
-                        f"即将打开{browser_name}浏览器的扩展安装页面。\n\n是否继续？",
-                        parent=extension_window
-                    )
-
-                    if response:
-                        try:
-                            webbrowser.open(url)
-                            messagebox.showinfo(
-                                "成功",
-                                f"{browser_name}扩展安装页面已打开！\n\n请按照页面指示完成安装。",
-                                parent=extension_window
-                            )
-                        except Exception as e:
-                            messagebox.showerror(
-                                "错误",
-                                f"无法打开安装页面：\n{str(e)}",
-                                parent=extension_window
-                            )
-                else:
-                    messagebox.showwarning("警告", "请先选择浏览器！", parent=extension_window)
-
-            # 绑定选择事件
-            browser_combo.bind("<<ComboboxSelected>>", on_browser_select)
-
-            # 检测按钮
-            detect_button = ttk.Button(
+            ttk.Button(
                 button_frame,
-                text="🔍 检测浏览器",
-                command=detect_browsers,
-                width=15
-            )
-            detect_button.pack(side=tk.LEFT, padx=(0, 10))
+                text="复制Chrome链接",
+                command=copy_chrome_link
+            ).pack(side=tk.LEFT, padx=(0, 10))
 
-            # 安装按钮
-            install_button = ttk.Button(
+            # 复制Edge链接按钮
+            def copy_edge_link():
+                self.root.clipboard_clear()
+                self.root.clipboard_append("http://yhsun.cn/educoder/edge.html")
+                messagebox.showinfo("成功", "Edge扩展链接已复制到剪贴板", parent=extension_window)
+
+            ttk.Button(
                 button_frame,
-                text="🚀 立即安装",
-                command=install_extension,
-                width=15
-            )
-            install_button.pack(side=tk.LEFT, padx=(0, 10))
+                text="复制Edge链接",
+                command=copy_edge_link
+            ).pack(side=tk.LEFT, padx=(0, 10))
 
             # 关闭按钮
-            close_button = ttk.Button(
+            ttk.Button(
                 button_frame,
                 text="关闭",
-                command=extension_window.destroy,
-                width=10
-            )
-            close_button.pack(side=tk.RIGHT)
-
-            # 状态栏
-            status_bar = ttk.Label(
-                extension_window,
-                text="就绪",
-                relief=tk.SUNKEN,
-                anchor=tk.W
-            )
-            status_bar.pack(side=tk.BOTTOM, fill=tk.X)
-
-            # 初始检测
-            detect_browsers()
+                command=extension_window.destroy
+            ).pack(side=tk.RIGHT)
 
             # 居中显示窗口
             extension_window.update_idletasks()
@@ -559,97 +511,11 @@ class EducoderGUI:
             y = (extension_window.winfo_screenheight() // 2) - (height // 2)
             extension_window.geometry(f'{width}x{height}+{x}+{y}')
 
-            self.log("内置扩展安装工具已打开")
+            self.log("扩展安装说明已显示")
 
         except Exception as e:
-            self.log(f"打开内置扩展安装工具时出错: {e}")
-            messagebox.showerror("错误", f"无法打开扩展安装工具:\n{str(e)}")
-
-    def check_chrome_installed(self):
-        """检测Chrome浏览器是否安装"""
-        try:
-            # Windows中Chrome可能的安装路径
-            possible_paths = [
-                os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
-                os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
-                os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
-                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
-            ]
-
-            # 检查注册表
-            try:
-                import winreg
-                reg_paths = [
-                    r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe",
-                    r"SOFTWARE\Classes\ChromeHTML\shell\open\command"
-                ]
-
-                for reg_path in reg_paths:
-                    try:
-                        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path)
-                        chrome_path, _ = winreg.QueryValueEx(key, "")
-                        chrome_path = chrome_path.strip('"')
-                        if os.path.exists(chrome_path):
-                            return True
-                    except:
-                        continue
-            except:
-                pass
-
-            # 检查常见路径
-            for path in possible_paths:
-                if os.path.exists(path):
-                    return True
-
-            return False
-
-        except Exception as e:
-            self.log(f"检测Chrome时出错: {e}")
-            return False
-
-    def check_edge_installed(self):
-        """检测Edge浏览器是否安装"""
-        try:
-            # Windows中Edge可能的安装路径
-            possible_paths = [
-                os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
-                os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
-                os.path.expandvars(r"%LocalAppData%\Microsoft\Edge\Application\msedge.exe"),
-                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-            ]
-
-            # 检查注册表
-            try:
-                import winreg
-                reg_paths = [
-                    r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe",
-                    r"SOFTWARE\Classes\MSEdgeHTM\shell\open\command"
-                ]
-
-                for reg_path in reg_paths:
-                    try:
-                        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path)
-                        edge_path, _ = winreg.QueryValueEx(key, "")
-                        edge_path = edge_path.strip('"')
-                        if os.path.exists(edge_path):
-                            return True
-                    except:
-                        continue
-            except:
-                pass
-
-            # 检查常见路径
-            for path in possible_paths:
-                if os.path.exists(path):
-                    return True
-
-            return False
-
-        except Exception as e:
-            self.log(f"检测Edge时出错: {e}")
-            return False
+            self.log(f"显示扩展安装说明时出错: {e}")
+            messagebox.showerror("错误", f"无法显示扩展安装说明:\n{str(e)}")
 
     def process_log_queue(self):
         """处理日志队列"""
@@ -951,8 +817,8 @@ class EducoderGUI:
             # 发送登出请求
             threading.Thread(target=self._perform_logout, daemon=True).start()
 
-            # 关闭主窗口
-            self.on_close()
+            # 退出程序，而不是最小化到托盘
+            self.real_close()
 
     def _perform_logout(self):
         """执行登出操作"""
@@ -983,10 +849,21 @@ class EducoderGUI:
             # 尝试从app.ico文件加载图标
             icon_path = "app.ico"
 
-            # 加载ICO文件
-            image = Image.open(icon_path)
-            # 调整图标大小到合适的尺寸（系统托盘通常使用16x16或32x32）
-            image = image.resize((32, 32), Image.Resampling.LANCZOS)
+            # 如果当前目录没有，尝试在父目录查找
+            if not os.path.exists(icon_path):
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                icon_path = os.path.join(os.path.dirname(current_dir), "app.ico")
+
+            if not os.path.exists(icon_path):
+                # 如果还是没有，创建一个简单的图标
+                image = Image.new('RGBA', (64, 64), (50, 50, 200, 255))
+                draw = ImageDraw.Draw(image)
+                draw.text((10, 25), "ED", fill=(255, 255, 255, 255))
+            else:
+                # 加载ICO文件
+                image = Image.open(icon_path)
+                # 调整图标大小到合适的尺寸
+                image = image.resize((64, 64), Image.Resampling.LANCZOS)
 
             # 创建菜单项
             menu_items = [
@@ -1014,7 +891,7 @@ class EducoderGUI:
             self.is_minimized_to_tray = True
             self.log("程序已最小化到系统托盘")
 
-            # 隐藏窗口
+            # 隐藏窗口（不销毁）
             self.root.withdraw()
 
             # 创建并运行系统托盘图标（在新线程中）
@@ -1025,6 +902,9 @@ class EducoderGUI:
                 # 在新线程中运行托盘图标
                 self.tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
                 self.tray_thread.start()
+        else:
+            # 如果已经在托盘中，再次最小化时只需隐藏窗口
+            self.root.withdraw()
 
     def restore_from_tray(self):
         """从系统托盘恢复窗口"""
@@ -1035,13 +915,18 @@ class EducoderGUI:
             if self.tray_icon is not None:
                 self.tray_icon.stop()
                 self.tray_icon = None
-                self.tray_thread = None
+                if self.tray_thread is not None:
+                    self.tray_thread.join(timeout=1)  # 等待线程结束
+                    self.tray_thread = None
 
             # 显示窗口
             self.root.deiconify()
             self.root.lift()
             self.root.focus_force()
             self.log("程序已从系统托盘恢复")
+
+            # 确保窗口可见并且在前台
+            self.root.update_idletasks()
 
     def cleanup_processes(self):
         """清理所有进程"""
@@ -1105,6 +990,9 @@ class EducoderGUI:
         self.is_closing = True
         self.log("正在关闭应用...")
 
+        # 清理单实例锁
+        self.cleanup_single_instance()
+
         # 停止系统托盘图标
         if self.tray_icon is not None:
             self.tray_icon.stop()
@@ -1128,7 +1016,8 @@ class EducoderGUI:
         self.cleanup_processes()
 
         # 关闭窗口
-        self.root.destroy()
+        if self.root:
+            self.root.destroy()
 
         # 强制退出程序
         os._exit(0)
@@ -1168,7 +1057,37 @@ class EducoderGUI:
             messagebox.showerror("启动错误", f"自动启动服务器时发生错误:\n{e}")
 
 
+def simple_instance_check():
+    """简单的单实例检查"""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(0.5)
+        result = sock.connect_ex(('localhost', 9000))
+        sock.close()
+
+        if result == 0:
+            # 已有实例在运行，尝试激活它
+            try:
+                activate_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                activate_sock.settimeout(2.0)
+                activate_sock.connect(('localhost', 9000))
+                activate_sock.send(b"ACTIVATE")
+                activate_sock.close()
+
+                print("Educoder助手已经在后台运行，正在激活窗口...")
+                return False
+            except:
+                return False
+    except:
+        pass
+    return True
+
+
 if __name__ == "__main__":
+    # 先进行单实例检查
+    if not simple_instance_check():
+        sys.exit(0)
+
     # 测试代码
     root = tk.Tk()
     app = EducoderGUI(root, "测试用户", "测试token")
