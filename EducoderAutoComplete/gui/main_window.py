@@ -12,7 +12,9 @@ import socket
 import time
 import psutil
 import atexit
-import pystray
+import pystickynote
+import subprocess
+import sys
 
 from PIL import Image, ImageDraw
 from tkinter import ttk, scrolledtext, messagebox
@@ -56,7 +58,7 @@ class EducoderGUI:
 
         # 设置窗口属性
         self.root.title("Educoder助手")
-        self.root.geometry("850x550")   # 增加宽度以适应语言选择
+        self.root.geometry("850x550")  # 增加宽度以适应语言选择
         self.root.resizable(True, True)
 
         # 设置关闭窗口的处理
@@ -93,13 +95,16 @@ class EducoderGUI:
         ttk.Label(user_frame, text=f"欢迎, {self.username} (版本: {self.CURRENT_VERSION})").grid(row=0, column=0,
                                                                                                  sticky=tk.W)
 
-        # 添加检测更新按钮和输入测试按钮
+        # 添加检测更新按钮、输入测试按钮、安装拓展按钮和退出登录按钮
         button_frame = ttk.Frame(user_frame)
         button_frame.grid(row=0, column=1, sticky=tk.E)
 
         ttk.Button(button_frame, text="输入测试", command=self.open_test_input_dialog, width=10).pack(side=tk.LEFT,
                                                                                                       padx=2)
         ttk.Button(button_frame, text="检测更新", command=self.check_update, width=10).pack(side=tk.LEFT, padx=2)
+        # 新增：安装拓展按钮
+        ttk.Button(button_frame, text="安装拓展", command=self.open_extension_setup, width=10).pack(side=tk.LEFT,
+                                                                                                    padx=2)
         ttk.Button(button_frame, text="退出登录", command=self.logout, width=10).pack(side=tk.LEFT, padx=2)
 
         # 配置选项区域
@@ -214,6 +219,437 @@ class EducoderGUI:
     def open_test_input_dialog(self):
         """打开输入测试对话框"""
         TestInputDialog(self.root)
+
+    def open_extension_setup(self):
+        """打开浏览器扩展安装工具"""
+        try:
+            # 查找extension_setup.py文件
+            script_path = self.find_extension_setup_file()
+
+            if script_path and os.path.exists(script_path):
+                self.log(f"正在打开扩展安装工具: {script_path}")
+
+                # 使用系统默认的Python解释器运行脚本
+                if sys.platform == "win32":
+                    # Windows系统
+                    python_exe = sys.executable
+                    subprocess.Popen([python_exe, script_path],
+                                     creationflags=subprocess.CREATE_NEW_CONSOLE)
+                else:
+                    # Linux/Mac系统
+                    subprocess.Popen([sys.executable, script_path])
+
+                self.log("扩展安装工具已启动")
+                self.status_var.set("扩展安装工具已打开")
+
+            else:
+                # 如果找不到文件，使用我们之前修改的版本
+                self.log("未找到extension_setup.py文件，使用内置浏览器检测工具")
+                self.open_builtin_extension_setup()
+
+        except Exception as e:
+            self.log(f"打开扩展安装工具时出错: {e}")
+            messagebox.showerror("错误", f"无法打开扩展安装工具:\n{str(e)}")
+            self.status_var.set("打开扩展安装工具失败")
+
+    def find_extension_setup_file(self):
+        """查找extension_setup.py文件"""
+        # 尝试在当前目录查找
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        possible_paths = [
+            os.path.join(current_dir, "extension_setup.py"),
+            os.path.join(os.path.dirname(current_dir), "extension_setup.py"),
+            os.path.join(current_dir, "gui", "extension_setup.py"),
+            os.path.join(current_dir, "tools", "extension_setup.py"),
+        ]
+
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+
+        # 如果在固定位置找不到，尝试搜索整个项目
+        project_root = os.path.dirname(current_dir)
+        for root, dirs, files in os.walk(project_root):
+            if "extension_setup.py" in files:
+                return os.path.join(root, "extension_setup.py")
+
+        return None
+
+    def open_builtin_extension_setup(self):
+        """打开内置的浏览器检测和扩展安装工具"""
+        try:
+            # 创建一个新的顶级窗口
+            extension_window = tk.Toplevel(self.root)
+            extension_window.title("浏览器扩展安装工具")
+            extension_window.geometry("500x550")
+
+            # 设置窗口图标（如果有的话）
+            try:
+                extension_window.iconbitmap(default='icon.ico')
+            except:
+                pass
+
+            # 设置样式
+            style = ttk.Style(extension_window)
+            style.theme_use('clam')
+
+            # 主框架
+            main_frame = ttk.Frame(extension_window, padding="20")
+            main_frame.pack(fill=tk.BOTH, expand=True)
+
+            # 标题
+            title_label = ttk.Label(
+                main_frame,
+                text="浏览器检测与扩展安装工具",
+                font=("微软雅黑", 16, "bold")
+            )
+            title_label.pack(pady=(0, 20))
+
+            # 浏览器状态显示区域
+            status_frame = ttk.LabelFrame(main_frame, text="浏览器检测结果", padding="15")
+            status_frame.pack(fill=tk.X, pady=(0, 20))
+
+            # Chrome状态
+            chrome_frame = ttk.Frame(status_frame)
+            chrome_frame.pack(fill=tk.X, pady=(0, 10))
+
+            chrome_icon_label = ttk.Label(
+                chrome_frame,
+                text="⚫",
+                font=("Arial", 20),
+                foreground="#4285F4"
+            )
+            chrome_icon_label.pack(side=tk.LEFT, padx=(0, 10))
+
+            chrome_info_frame = ttk.Frame(chrome_frame)
+            chrome_info_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+            chrome_status_label = ttk.Label(
+                chrome_info_frame,
+                text="Chrome浏览器",
+                font=("微软雅黑", 10, "bold")
+            )
+            chrome_status_label.pack(anchor=tk.W)
+
+            chrome_detail_label = ttk.Label(
+                chrome_info_frame,
+                text="等待检测...",
+                font=("微软雅黑", 9)
+            )
+            chrome_detail_label.pack(anchor=tk.W)
+
+            # Edge状态
+            edge_frame = ttk.Frame(status_frame)
+            edge_frame.pack(fill=tk.X)
+
+            edge_icon_label = ttk.Label(
+                edge_frame,
+                text="⚫",
+                font=("Arial", 20),
+                foreground="#0078D7"
+            )
+            edge_icon_label.pack(side=tk.LEFT, padx=(0, 10))
+
+            edge_info_frame = ttk.Frame(edge_frame)
+            edge_info_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+            edge_status_label = ttk.Label(
+                edge_info_frame,
+                text="Edge浏览器",
+                font=("微软雅黑", 10, "bold")
+            )
+            edge_status_label.pack(anchor=tk.W)
+
+            edge_detail_label = ttk.Label(
+                edge_info_frame,
+                text="等待检测...",
+                font=("微软雅黑", 9)
+            )
+            edge_detail_label.pack(anchor=tk.W)
+
+            # 扩展安装选择区域
+            install_frame = ttk.LabelFrame(main_frame, text="扩展安装选项", padding="10")
+            install_frame.pack(fill=tk.X, pady=(0, 20))
+
+            # 浏览器选择标签
+            ttk.Label(
+                install_frame,
+                text="选择要安装扩展的浏览器:",
+                font=("微软雅黑", 9)
+            ).pack(anchor=tk.W, pady=(0, 5))
+
+            # 浏览器选择下拉框
+            browser_var = tk.StringVar(value="请选择浏览器")
+            browser_combo = ttk.Combobox(
+                install_frame,
+                textvariable=browser_var,
+                state="readonly",
+                font=("微软雅黑", 10),
+                width=25
+            )
+            browser_combo.pack(anchor=tk.W, pady=(0, 10))
+
+            # 安装URL显示
+            url_frame = ttk.Frame(install_frame)
+            url_frame.pack(fill=tk.X, pady=(0, 10))
+
+            ttk.Label(
+                url_frame,
+                text="安装页面:",
+                font=("微软雅黑", 9)
+            ).pack(side=tk.LEFT)
+
+            url_label = ttk.Label(
+                url_frame,
+                text="请先选择浏览器",
+                font=("微软雅黑", 9),
+                foreground="#0078D7"
+            )
+            url_label.pack(side=tk.LEFT, padx=(5, 0))
+
+            # 按钮框架
+            button_frame = ttk.Frame(main_frame)
+            button_frame.pack(fill=tk.X)
+
+            # 安装URL映射
+            install_urls = {
+                "Chrome浏览器": "http://yhsun.cn/educoder/chrome.html",
+                "Edge浏览器": "http://yhsun.cn/educoder/edge.html"
+            }
+
+            def detect_browsers():
+                """检测浏览器安装状态"""
+                browsers = {"chrome": {"installed": False}, "edge": {"installed": False}}
+
+                # 检测Chrome
+                chrome_installed = self.check_chrome_installed()
+                browsers["chrome"]["installed"] = chrome_installed
+
+                # 检测Edge
+                edge_installed = self.check_edge_installed()
+                browsers["edge"]["installed"] = edge_installed
+
+                # 更新UI显示
+                if chrome_installed:
+                    chrome_icon_label.config(text="✅")
+                    chrome_status_label.config(text="Chrome浏览器 (已安装)", foreground="green")
+                    chrome_detail_label.config(text="Chrome浏览器已安装")
+                else:
+                    chrome_icon_label.config(text="❌")
+                    chrome_status_label.config(text="Chrome浏览器 (未安装)", foreground="red")
+                    chrome_detail_label.config(text="未找到Chrome浏览器")
+
+                if edge_installed:
+                    edge_icon_label.config(text="✅")
+                    edge_status_label.config(text="Edge浏览器 (已安装)", foreground="green")
+                    edge_detail_label.config(text="Edge浏览器已安装")
+                else:
+                    edge_icon_label.config(text="❌")
+                    edge_status_label.config(text="Edge浏览器 (未安装)", foreground="red")
+                    edge_detail_label.config(text="未找到Edge浏览器")
+
+                # 更新下拉选择框
+                installed_browsers = []
+                if chrome_installed:
+                    installed_browsers.append("Chrome浏览器")
+                if edge_installed:
+                    installed_browsers.append("Edge浏览器")
+
+                if installed_browsers:
+                    browser_combo['values'] = installed_browsers
+                    if len(installed_browsers) == 1:
+                        browser_var.set(installed_browsers[0])
+                        on_browser_select(None)
+                else:
+                    browser_combo['values'] = []
+                    browser_var.set("未找到可用浏览器")
+
+                return browsers
+
+            def on_browser_select(event):
+                """浏览器选择事件处理"""
+                selected = browser_var.get()
+
+                if selected == "Chrome浏览器":
+                    url_label.config(text=install_urls["Chrome浏览器"])
+                elif selected == "Edge浏览器":
+                    url_label.config(text=install_urls["Edge浏览器"])
+                else:
+                    url_label.config(text="请先选择浏览器")
+
+            def install_extension():
+                """安装扩展"""
+                selected = browser_var.get()
+
+                if selected in install_urls:
+                    url = install_urls[selected]
+                    browser_name = selected.replace("浏览器", "")
+
+                    # 询问确认
+                    response = messagebox.askyesno(
+                        "确认安装",
+                        f"即将打开{browser_name}浏览器的扩展安装页面。\n\n是否继续？",
+                        parent=extension_window
+                    )
+
+                    if response:
+                        try:
+                            webbrowser.open(url)
+                            messagebox.showinfo(
+                                "成功",
+                                f"{browser_name}扩展安装页面已打开！\n\n请按照页面指示完成安装。",
+                                parent=extension_window
+                            )
+                        except Exception as e:
+                            messagebox.showerror(
+                                "错误",
+                                f"无法打开安装页面：\n{str(e)}",
+                                parent=extension_window
+                            )
+                else:
+                    messagebox.showwarning("警告", "请先选择浏览器！", parent=extension_window)
+
+            # 绑定选择事件
+            browser_combo.bind("<<ComboboxSelected>>", on_browser_select)
+
+            # 检测按钮
+            detect_button = ttk.Button(
+                button_frame,
+                text="🔍 检测浏览器",
+                command=detect_browsers,
+                width=15
+            )
+            detect_button.pack(side=tk.LEFT, padx=(0, 10))
+
+            # 安装按钮
+            install_button = ttk.Button(
+                button_frame,
+                text="🚀 立即安装",
+                command=install_extension,
+                width=15
+            )
+            install_button.pack(side=tk.LEFT, padx=(0, 10))
+
+            # 关闭按钮
+            close_button = ttk.Button(
+                button_frame,
+                text="关闭",
+                command=extension_window.destroy,
+                width=10
+            )
+            close_button.pack(side=tk.RIGHT)
+
+            # 状态栏
+            status_bar = ttk.Label(
+                extension_window,
+                text="就绪",
+                relief=tk.SUNKEN,
+                anchor=tk.W
+            )
+            status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+            # 初始检测
+            detect_browsers()
+
+            # 居中显示窗口
+            extension_window.update_idletasks()
+            width = extension_window.winfo_width()
+            height = extension_window.winfo_height()
+            x = (extension_window.winfo_screenwidth() // 2) - (width // 2)
+            y = (extension_window.winfo_screenheight() // 2) - (height // 2)
+            extension_window.geometry(f'{width}x{height}+{x}+{y}')
+
+            self.log("内置扩展安装工具已打开")
+
+        except Exception as e:
+            self.log(f"打开内置扩展安装工具时出错: {e}")
+            messagebox.showerror("错误", f"无法打开扩展安装工具:\n{str(e)}")
+
+    def check_chrome_installed(self):
+        """检测Chrome浏览器是否安装"""
+        try:
+            # Windows中Chrome可能的安装路径
+            possible_paths = [
+                os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+                os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+                os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+            ]
+
+            # 检查注册表
+            try:
+                import winreg
+                reg_paths = [
+                    r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe",
+                    r"SOFTWARE\Classes\ChromeHTML\shell\open\command"
+                ]
+
+                for reg_path in reg_paths:
+                    try:
+                        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path)
+                        chrome_path, _ = winreg.QueryValueEx(key, "")
+                        chrome_path = chrome_path.strip('"')
+                        if os.path.exists(chrome_path):
+                            return True
+                    except:
+                        continue
+            except:
+                pass
+
+            # 检查常见路径
+            for path in possible_paths:
+                if os.path.exists(path):
+                    return True
+
+            return False
+
+        except Exception as e:
+            self.log(f"检测Chrome时出错: {e}")
+            return False
+
+    def check_edge_installed(self):
+        """检测Edge浏览器是否安装"""
+        try:
+            # Windows中Edge可能的安装路径
+            possible_paths = [
+                os.path.expandvars(r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"),
+                os.path.expandvars(r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"),
+                os.path.expandvars(r"%LocalAppData%\Microsoft\Edge\Application\msedge.exe"),
+                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+            ]
+
+            # 检查注册表
+            try:
+                import winreg
+                reg_paths = [
+                    r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe",
+                    r"SOFTWARE\Classes\MSEdgeHTM\shell\open\command"
+                ]
+
+                for reg_path in reg_paths:
+                    try:
+                        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path)
+                        edge_path, _ = winreg.QueryValueEx(key, "")
+                        edge_path = edge_path.strip('"')
+                        if os.path.exists(edge_path):
+                            return True
+                    except:
+                        continue
+            except:
+                pass
+
+            # 检查常见路径
+            for path in possible_paths:
+                if os.path.exists(path):
+                    return True
+
+            return False
+
+        except Exception as e:
+            self.log(f"检测Edge时出错: {e}")
+            return False
 
     def process_log_queue(self):
         """处理日志队列"""
@@ -554,12 +990,12 @@ class EducoderGUI:
 
             # 创建菜单项
             menu_items = [
-                pystray.MenuItem("显示主窗口", self.restore_from_tray),
-                pystray.MenuItem("退出程序", self.quit_program)
+                pystickynote.MenuItem("显示主窗口", self.restore_from_tray),
+                pystickynote.MenuItem("退出程序", self.quit_program)
             ]
 
             # 创建托盘图标
-            tray_icon = pystray.Icon("educoder_icon", image, "Educoder助手", menu_items)
+            tray_icon = pystickynote.Icon("educoder_icon", image, "Educoder助手", menu_items)
 
             return tray_icon
 
@@ -730,3 +1166,10 @@ class EducoderGUI:
         except Exception as e:
             self.log(f"自动启动服务器时发生错误: {e}")
             messagebox.showerror("启动错误", f"自动启动服务器时发生错误:\n{e}")
+
+
+if __name__ == "__main__":
+    # 测试代码
+    root = tk.Tk()
+    app = EducoderGUI(root, "测试用户", "测试token")
+    root.mainloop()

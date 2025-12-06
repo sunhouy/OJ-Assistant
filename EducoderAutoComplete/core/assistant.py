@@ -142,6 +142,7 @@ class EducoderAssistant:
 
                 if full_code:
                     self.current_code = full_code
+                    self.update_progress(30)  # 代码生成完成
                     self.update_progress(10)  # 代码生成完成
                     await self.send_progress_update(websocket)
 
@@ -286,6 +287,7 @@ class EducoderAssistant:
             self.input_simulator.reset()
 
             # 更新进度
+            self.update_progress(60 if is_retry else 45)
             self.update_progress(40 if is_retry else 50)
             await self.send_progress_update(websocket)
 
