@@ -16,7 +16,7 @@ class LoginWindow:
     def __init__(self, root):
         self.root = root
         self.root.title("Educoder助手")
-        self.root.iconphoto(True, tk.PhotoImage(file='app.ico'))
+        self.root.iconphoto(True, tk.PhotoImage(file='C:\Program Files\Educoder Assistant\\app.ico'))
         self.root.geometry("400x400")
         self.root.resizable(False, True)
 

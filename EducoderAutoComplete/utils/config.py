@@ -2,7 +2,6 @@
 import configparser
 import hashlib
 import json
-import sys
 from pathlib import Path
 
 from utils.crypto import crypto_manager

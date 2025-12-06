@@ -202,11 +202,11 @@ class InputSimulator:
                 x = screen_width // 2
                 y = screen_height // 2
                 pyautogui.click(x=x, y=y)
-                time.sleep(0.1)
+                time.sleep(0.05)
                 auto.SendKeys('{Ctrl}a')    # 全选
-                time.sleep(0.1)
+                time.sleep(0.05)
                 auto.SendKeys('{Delete}')   # 删除
-                time.sleep(0.1)
+                time.sleep(0.05)
 
             if text.strip():
                 # 使用批量输入
@@ -249,7 +249,7 @@ class InputSimulator:
                                 if part == '{':
                                     # 输入左括号（转义），等待自动补全，然后删除右括号
                                     auto.SendKeys('{{}')
-                                    time.sleep(0.1)  # 等待编辑器自动补全右括号
+                                    # time.sleep(0.05)  # 等待编辑器自动补全右括号
                                     auto.SendKeys('{Delete}')
                                 elif part:
                                     # 发送其他部分
@@ -264,7 +264,7 @@ class InputSimulator:
                         auto.SendKeys('{Enter}')
                         auto.SendKeys('{Home}')   # 删除自动补全的空格
                         self.line_count += 1
-                        time.sleep(0.05)  # 换行后的短暂等待
+                        # time.sleep(0.01)  # 换行后的短暂等待
             return True
 
         except Exception as e:

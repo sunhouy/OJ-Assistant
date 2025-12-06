@@ -1,6 +1,4 @@
-﻿import sys
-import signal
-import tkinter as tk
+﻿import tkinter as tk
 import threading
 import queue
 import os

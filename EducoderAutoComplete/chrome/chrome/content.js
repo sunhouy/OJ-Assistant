@@ -33,8 +33,47 @@ class EducoderFloatingAssistant {
         this.attachEventListeners();
         await this.loadSettings();
         this.extractPageContent();
+        this.addStyle(); // 添加CSS样式
 
         await this.autoConnect();
+    }
+
+    addStyle() {
+        const style = document.createElement('style');
+        style.textContent = `
+            .educoder-assistant {
+                resize: both;
+                overflow: auto;
+                min-width: 320px;
+                min-height: 400px;
+                max-width: 90vw;
+                max-height: 90vh;
+            }
+
+            .ea-minimized-state {
+                resize: none !important;
+            }
+
+            .ea-testresult-textarea {
+                width: 100%;
+                height: 200px;
+                padding: 8px;
+                border: 1px solid #444;
+                border-radius: 4px;
+                background: #222;
+                color: #fff;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+                line-height: 1.4;
+                resize: vertical;
+            }
+
+            .ea-preview-content {
+                max-height: 300px;
+                overflow-y: auto;
+            }
+        `;
+        document.head.appendChild(style);
     }
 
     createTopTipOverlay() {
@@ -232,20 +271,22 @@ class EducoderFloatingAssistant {
                     </div>
                 </div>
 
-                <!-- 连接配置 -->
+                <!-- 服务器连接 -->
                 <div class="ea-section">
-                    <div class="ea-input-group">
-                        <label for="eaServerUrl">服务器地址：</label>
-                        <input type="text" id="eaServerUrl" placeholder="ws://localhost:8000"
-                               class="ea-input">
+                    <h4>服务器连接</h4>
+                    <!--
+                    <div class="ea-static-address">
+                        <span>服务器地址：</span>
+                        <code>ws://localhost:8000</code>
                     </div>
+                    -->
                     <div class="ea-button-group">
                         <button id="eaConnectBtn" class="ea-btn ea-primary">连接</button>
                         <button id="eaDisconnectBtn" class="ea-btn ea-secondary" disabled>断开</button>
                     </div>
                 </div>
 
-                <!-- 内容操作 -->
+                <!-- 题目处理 -->
                 <div class="ea-section">
                     <h4>题目处理</h4>
                     <div class="ea-button-group">
@@ -275,7 +316,7 @@ class EducoderFloatingAssistant {
                             </div>
                             <div id="eaTestResultPreview" class="ea-preview-content">
                                 <textarea id="eaTestResultTextarea" class="ea-testresult-textarea"
-                                          placeholder="运行测试后，测试结果将自动显示在这里..."
+                                          placeholder="运行测试后，测试结果显示在这里..."
                                           readonly></textarea>
                             </div>
                         </div>
@@ -301,7 +342,6 @@ class EducoderFloatingAssistant {
     }
 
     initializeElements() {
-        this.serverUrlInput = document.getElementById('eaServerUrl');
         this.connectBtn = document.getElementById('eaConnectBtn');
         this.disconnectBtn = document.getElementById('eaDisconnectBtn');
         this.header = this.container.querySelector('.ea-header');
@@ -344,14 +384,6 @@ class EducoderFloatingAssistant {
             }
         });
         this.closeBtn.addEventListener('click', () => this.hide());
-
-        this.serverUrlInput.addEventListener('change', () => {
-            this.saveSettings();
-            if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-                this.showMessage('服务器地址已更新，正在重新连接...', 'system');
-                setTimeout(() => this.connect(), 500);
-            }
-        });
 
         this.attachDragEvents();
 
@@ -428,10 +460,7 @@ class EducoderFloatingAssistant {
 
     async loadSettings() {
         try {
-            const result = await chrome.storage.local.get(['serverUrl', 'windowPosition']);
-            if (result.serverUrl && this.serverUrlInput) {
-                this.serverUrlInput.value = result.serverUrl;
-            }
+            const result = await chrome.storage.local.get(['windowPosition']);
             if (result.windowPosition && this.container) {
                 this.container.style.left = result.windowPosition.x + 'px';
                 this.container.style.top = result.windowPosition.y + 'px';
@@ -448,19 +477,11 @@ class EducoderFloatingAssistant {
     saveSettings() {
         const rect = this.container.getBoundingClientRect();
         chrome.storage.local.set({
-            serverUrl: this.serverUrlInput.value,
             windowPosition: { x: rect.left, y: rect.top }
         });
     }
 
     async autoConnect() {
-        const url = this.serverUrlInput.value.trim();
-
-        if (!url) {
-            this.showMessage('未配置服务器地址，请手动连接', 'system');
-            return;
-        }
-
         if (this.autoConnectAttempted) {
             return;
         }
@@ -469,20 +490,17 @@ class EducoderFloatingAssistant {
         this.showMessage('正在自动连接服务器...', 'system');
 
         try {
-            await this.connectWebSocket(url);
+            await this.connectWebSocket();
         } catch (error) {
             this.showMessage(`自动连接失败: ${error.message}`, 'error');
             this.updateConnectionState('CLOSED');
         }
     }
 
-    connectWebSocket(url) {
-        return new Promise((resolve, reject) => {
-            if (!url) {
-                reject(new Error('服务器地址为空'));
-                return;
-            }
+    connectWebSocket() {
+        const url = 'ws://localhost:8000'; // 固定服务器地址
 
+        return new Promise((resolve, reject) => {
             try {
                 this.socket = new WebSocket(url);
                 this.updateConnectionState('CONNECTING');
@@ -526,18 +544,11 @@ class EducoderFloatingAssistant {
     }
 
     connect() {
-        const url = this.serverUrlInput.value.trim();
-
-        if (!url) {
-            this.showMessage('请输入服务器地址', 'error');
-            return;
-        }
-
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
             this.socket.close(1000, '重新连接');
         }
 
-        this.connectWebSocket(url).catch(error => {
+        this.connectWebSocket().catch(error => {
             this.showMessage(`手动连接失败: ${error.message}`, 'error');
         });
     }
@@ -901,7 +912,7 @@ class EducoderFloatingAssistant {
             const lineCount = testResults.text.split('\n').length;
             this.testResultCount.textContent = `${charCount} 字符, ${lineCount} 行`;
 
-            this.showMessage('正在分析测试结果并进行纠错...', 'system');
+            this.showMessage(`找到${testResults.elementsCount}个测试元素，正在分析测试结果并进行纠错...`, 'system');
 
             // 发送测试结果到服务器
             const testData = {
@@ -911,7 +922,15 @@ class EducoderFloatingAssistant {
                 results: testResults,
                 currentCode: this.generatedCode,
                 // 始终设置 has_error 为 true，确保服务器进行纠错
-                has_error: true
+                has_error: true,
+                // 添加测试集元素的详细信息
+                testElementsInfo: {
+                    count: testResults.elementsCount,
+                    types: testResults.elements.map(e => e.tagName),
+                    classes: testResults.elements.map(e => e.className),
+                    hasTestSetElements: testResults.rawHtml.includes('test-case-item') ||
+                                        testResults.text.includes('测试集')
+                }
             };
 
             this.socket.send(JSON.stringify(testData, null, 2));
@@ -930,13 +949,16 @@ class EducoderFloatingAssistant {
 
     extractTestResults() {
         const testResultSelectors = [
+            // 首先尝试查找测试集容器元素
+            'li[class*="test-case-item"]',
+            '.test-case-item',
+            '.case-item',
+            '.test-case',
             '.judge-result',
             '.test-result',
             '.result-panel',
-            '.case-item',
-            '.judge-detail',
-            '.test-case',
             '.case-content',
+            '.judge-detail',
             '.run-result',
             '.score-board',
             '.pass-rate',
@@ -952,16 +974,30 @@ class EducoderFloatingAssistant {
 
         let testElements = [];
 
-        // 先尝试通过选择器查找
+        // 先尝试通过选择器查找测试集元素
         for (const selector of testResultSelectors) {
             const found = document.querySelectorAll(selector);
             if (found.length > 0) {
-                testElements = Array.from(found);
-                break;
+                // 特别处理测试集元素
+                if (selector.includes('test-case-item')) {
+                    console.log('找到测试集元素，数量:', found.length);
+                    // 确保我们获取的是可见的测试集
+                    const visibleElements = Array.from(found).filter(el => {
+                        const style = window.getComputedStyle(el);
+                        return style.display !== 'none' && style.visibility !== 'hidden';
+                    });
+                    testElements = visibleElements;
+                } else {
+                    testElements = Array.from(found);
+                }
+
+                if (testElements.length > 0) {
+                    break;
+                }
             }
         }
 
-        // 如果没找到，尝试查找包含测试关键信息的元素
+        // 如果没有找到，尝试查找包含测试关键信息的元素
         if (testElements.length === 0) {
             const allElements = document.querySelectorAll('div, tr, td, li, span, pre, code, table');
             testElements = Array.from(allElements).filter(el => {
@@ -994,6 +1030,16 @@ class EducoderFloatingAssistant {
             });
         }
 
+        // 特别查找包含测试集数字的元素
+        if (testElements.length === 0) {
+            const testSetElements = document.querySelectorAll('*');
+            testElements = Array.from(testSetElements).filter(el => {
+                const text = el.textContent || '';
+                return /测试集\d+/.test(text) &&
+                       (text.includes('测试输入') || text.includes('预期输出') || text.includes('实际输出'));
+            });
+        }
+
         // 如果还没找到，尝试查找结果容器
         if (testElements.length === 0) {
             // 查找常见的结果容器
@@ -1008,6 +1054,13 @@ class EducoderFloatingAssistant {
                     break;
                 }
             }
+        }
+
+        // 记录找到的元素信息
+        console.log('找到的测试元素数量:', testElements.length);
+        if (testElements.length > 0) {
+            console.log('第一个元素类名:', testElements[0].className);
+            console.log('第一个元素HTML前200字符:', testElements[0].innerHTML.substring(0, 200));
         }
 
         if (testElements.length === 0) {
@@ -1025,6 +1078,7 @@ class EducoderFloatingAssistant {
                     const tempDiv = document.createElement('div');
                     tempDiv.textContent = matches.join('\n\n');
                     testElements = [tempDiv];
+                    console.log('通过文本匹配找到测试结果');
                     break;
                 }
             }
@@ -1032,6 +1086,7 @@ class EducoderFloatingAssistant {
 
         if (testElements.length === 0) {
             // 如果还是没找到，返回null
+            console.log('未找到测试结果');
             return null;
         }
 
@@ -1039,6 +1094,7 @@ class EducoderFloatingAssistant {
         const testResultTexts = testElements.map(el => {
             const text = el.textContent?.trim() || '';
             const html = el.innerHTML?.trim() || '';
+            const outerHtml = el.outerHTML?.trim() || '';
 
             // 清理文本：移除多余空格，保留格式
             let cleanedText = text
@@ -1081,6 +1137,7 @@ class EducoderFloatingAssistant {
             return {
                 text: cleanedText,
                 html: html,
+                outerHtml: outerHtml.substring(0, 5000), // 限制outerHtml长度
                 element: el,
                 className: el.className,
                 tagName: el.tagName
@@ -1102,12 +1159,15 @@ class EducoderFloatingAssistant {
 
         // 合并文本，保留重要信息
         let fullText = '';
+        let fullHtml = '';
 
         // 首先提取包含关键信息的文本
         const keySections = [];
+        const keyHtmlSections = [];
 
         for (const result of mergedTexts) {
             const text = result.text;
+            const html = result.outerHtml || result.html;
 
             // 分割文本以提取测试集信息
             const sections = text.split(/(?=测试集\d+)/);
@@ -1121,14 +1181,24 @@ class EducoderFloatingAssistant {
                     keySections.push(section.trim());
                 }
             }
+
+            // 添加HTML内容
+            if (html && html.length > 0) {
+                keyHtmlSections.push(html);
+            }
         }
 
         // 合并关键部分
         fullText = keySections.join('\n\n');
+        fullHtml = keyHtmlSections.join('\n\n');
 
         // 如果没有关键部分，使用原始文本
         if (!fullText.trim()) {
             fullText = mergedTexts.map(r => r.text).join('\n\n');
+        }
+
+        if (!fullHtml.trim()) {
+            fullHtml = mergedTexts.map(r => r.html).join('\n\n');
         }
 
         // 如果总文本太长，限制长度
@@ -1137,9 +1207,17 @@ class EducoderFloatingAssistant {
             fullText = fullText.substring(0, 8000) + '\n...\n[测试结果过长，已截断]';
         }
 
+        // 限制HTML长度
+        if (fullHtml.length > 15000) {
+            fullHtml = fullHtml.substring(0, 15000) + '\n...\n[HTML过长，已截断]';
+        }
+
+        console.log('提取的测试文本长度:', fullText.length);
+        console.log('提取的HTML长度:', fullHtml.length);
+
         return {
             text: fullText,
-            rawHtml: mergedTexts.map(r => r.html).join('\n'),
+            rawHtml: fullHtml,
             elements: mergedTexts.map(r => ({
                 text: r.text.substring(0, 300),
                 className: r.className,
