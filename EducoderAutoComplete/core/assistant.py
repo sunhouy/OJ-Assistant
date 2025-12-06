@@ -29,6 +29,7 @@ class EducoderAssistant:
         self.max_retries = 3
         self.is_input_in_progress = False
         self.current_code = None
+        self.current_progress = 0  # 当前进度
 
         self.gui.log(f"Assistant初始化，当前语言: {self.current_language.upper()}")
 
@@ -57,6 +58,9 @@ class EducoderAssistant:
                                 await self.handle_test_results(websocket, data)
                             elif data.get('type') == 'ready_for_input':
                                 await self.handle_ready_for_input(websocket, data)
+                            elif data.get('type') == 'progress_request':
+                                # 处理前端进度请求
+                                await self.send_progress_update(websocket)
                             else:
                                 self.gui.log(f"收到消息: {message}")
                                 await websocket.send(f"服务器回复: {message}")
@@ -82,6 +86,25 @@ class EducoderAssistant:
         finally:
             self.gui.log("连接关闭")
 
+    async def send_progress_update(self, websocket):
+        """发送当前进度到前端"""
+        try:
+            await websocket.send(json.dumps({
+                "type": "progress_update",
+                "progress": self.current_progress,
+                "timestamp": datetime.now().isoformat()
+            }, ensure_ascii=False))
+        except Exception as e:
+            self.gui.log(f"发送进度更新失败: {e}")
+
+    def update_progress(self, progress):
+        """更新进度"""
+        self.current_progress = max(0, min(100, progress))
+        self.gui.log(f"进度更新: {self.current_progress}%")
+
+        # 更新GUI状态
+        self.gui.root.after(0, lambda: self.gui.update_status(f"进度: {self.current_progress}%"))
+
     async def handle_educoder_content_auto_input(self, websocket, data):
         """处理题目内容并自动输入"""
         try:
@@ -101,10 +124,15 @@ class EducoderAssistant:
                 self.typing_active = True
                 self.input_simulator.reset()
                 self.is_input_in_progress = True
+                self.current_progress = 0  # 重置进度
 
                 self.gui.log(f"题目内容长度: {len(question_text)} 字符")
                 self.gui.root.after(0,
                                     lambda: self.gui.update_status(f"正在生成{self.current_language.upper()}代码..."))
+
+                # 发送初始进度
+                self.update_progress(5)
+                await self.send_progress_update(websocket)
 
                 await websocket.send(f"已收到题目内容，正在向DeepSeek请求{self.current_language.upper()}代码解决方案...")
                 await websocket.send(f"当前编程语言: {self.current_language.upper()}")
@@ -114,6 +142,9 @@ class EducoderAssistant:
 
                 if full_code:
                     self.current_code = full_code
+                    self.update_progress(30)  # 代码生成完成
+                    await self.send_progress_update(websocket)
+
                     await websocket.send("✅ 代码生成完成，准备开始自动输入...")
 
                     # 通知前端开始输入
@@ -180,6 +211,10 @@ class EducoderAssistant:
                 # 增加重试计数
                 self.retry_count += 1
 
+                # 更新进度
+                self.update_progress(20 + (self.retry_count * 10))
+                await self.send_progress_update(websocket)
+
                 await websocket.send(f"检测到测试失败，开始第 {self.retry_count} 次纠错...")
 
                 # 开始纠错流程
@@ -191,6 +226,10 @@ class EducoderAssistant:
 
                 if revised_code:
                     self.current_code = revised_code
+
+                    # 更新进度
+                    self.update_progress(50)
+                    await self.send_progress_update(websocket)
 
                     # 发送修订代码给前端
                     await websocket.send(json.dumps({
@@ -253,6 +292,10 @@ class EducoderAssistant:
             self.is_input_in_progress = True
             self.input_simulator.reset()
 
+            # 更新进度
+            self.update_progress(60 if is_retry else 45)
+            await self.send_progress_update(websocket)
+
             if is_retry:
                 await websocket.send(f"开始第 {retry_count} 次纠错输入...")
                 self.gui.root.after(0, lambda: self.gui.update_status(f"正在输入纠错代码 (第{retry_count}次)..."))
@@ -266,6 +309,10 @@ class EducoderAssistant:
                 success = self.input_simulator.paste_code(code)
 
                 if success:
+                    # 更新进度
+                    self.update_progress(100)
+                    await self.send_progress_update(websocket)
+
                     await websocket.send("✅ 代码已通过复制粘贴完成输入")
                     self.gui.root.after(0,
                                         lambda: self.gui.update_status(f"{self.current_language.upper()}代码输入完成"))
@@ -313,8 +360,9 @@ class EducoderAssistant:
             )
             self.is_first_chunk = False
 
-            # 发送进度更新
-            progress = min(100, int((i + 1) / len(chunks) * 100))
+            # 计算进度
+            progress = 60 + int((i + 1) / len(chunks) * 40)  # 从60%到100%
+            self.update_progress(progress)
 
             # 发送JSON格式的进度消息
             await websocket.send(json.dumps({
@@ -335,6 +383,10 @@ class EducoderAssistant:
 
         # 只有在未按下ESC键的情况下才显示完成消息
         if not self.input_simulator.esc_pressed:
+            # 更新最终进度
+            self.update_progress(100)
+            await self.send_progress_update(websocket)
+
             # 发送输入完成消息
             await websocket.send(json.dumps({
                 "type": "input_complete",
@@ -375,7 +427,8 @@ class EducoderAssistant:
             '失败',
             '×',
             '✗',
-            '不正确'
+            '不正确',
+            '测试失败详情：'  # 新增的错误标记
         ]
 
         # 首先检查是否有明显的错误标记
@@ -614,6 +667,7 @@ class EducoderAssistant:
 
 请生成修复后的{lang_name}代码：
 """
+        print(prompt)
         return prompt
 
     def _get_retry_system_prompt(self):
@@ -630,20 +684,11 @@ class EducoderAssistant:
         lang_name = language_mapping.get(self.current_language, self.current_language.upper())
 
         system_prompt = f"""你是一个专业的编程助手，负责根据测试失败信息修正{lang_name}代码。
-
 重要规则：
-1. 仔细分析测试失败的原因
-2. 针对失败的具体案例修正代码
-3. 确保修正后的代码能够处理所有测试输入
-4. 只返回纯代码，不要有任何解释、注释或额外文字
-5. 绝对不要使用任何代码块标记
-6. 代码必须完整且可运行
-
-{"7. 如果是C语言程序，不要包含return 0语句" if self.current_language == "C" else ""}
-{"8. 如果是C++程序，不要使用using namespace std" if self.current_language == "C++" else ""}
-
+1. 只返回纯代码，不要有任何解释、注释或额外文字
+2. 绝对不要使用任何代码块标记
+3. 代码必须完整且可运行
 专注于修复已知的错误，确保代码通过所有测试。"""
-
         return system_prompt
 
     async def get_complete_code_solution(self, question_text):
@@ -697,18 +742,11 @@ class EducoderAssistant:
         lang_name = language_mapping.get(self.current_language, self.current_language.upper())
 
         system_prompt = f"""你是一个专业的编程助手，负责生成{lang_name}代码。
-
 重要规则：
 1. 只返回纯代码，不要有任何解释、注释或额外文字
 2. 绝对不要使用任何代码块标记（如```或```{self.current_language}）
 3. 代码必须完整且可运行
-4. 严格按照题目要求编写代码
-
-{"5. 如果是C语言程序，不要包含return 0语句" if self.current_language == "C" else ""}
-{"6. 如果是C++程序，不要使用using namespace std" if self.current_language == "C++" else ""}
-
 你的输出应该只包含代码，没有任何其他内容。"""
-
         return system_prompt
 
     def _build_prompt(self, question_text):
