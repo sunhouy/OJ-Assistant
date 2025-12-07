@@ -1,9 +1,8 @@
-﻿import pyautogui
-import time
+﻿import time
 import pyperclip
 import keyboard
+import pyautogui
 from tkinter import messagebox
-import uiautomation as auto
 
 
 class InputSimulator:
@@ -27,27 +26,24 @@ class InputSimulator:
             self.esc_pressed = True
             self.typing_active = False
 
-    def escape_braces(self, text):
-        """转义文本中的左括号"""
-        # { -> {{}
-        return text.replace('{', '{{}')
-
     def paste_code(self, code):
         """使用复制粘贴方式输入代码"""
         try:
             # 安装ESC键监听
             keyboard.on_press_key('esc', self.set_esc_pressed, suppress=False)
 
-            # 清空编辑器
+            # 激活编辑器（点击屏幕中央）
             screen_width, screen_height = pyautogui.size()
             x = screen_width // 2
             y = screen_height // 2
             pyautogui.click(x=x, y=y)
-            time.sleep(0.1)
-            auto.SendKeys('{Ctrl}a')
-            time.sleep(0.1)
-            auto.SendKeys('{Delete}')
-            time.sleep(0.2)
+            time.sleep(0.05)
+
+            # 清空编辑器内容
+            keyboard.press_and_release('ctrl+a')
+            time.sleep(0.05)
+            keyboard.press_and_release('delete')
+            time.sleep(0.05)
 
             # 检查ESC键
             if self.esc_pressed:
@@ -56,12 +52,10 @@ class InputSimulator:
                 keyboard.unhook_all()
                 return False
 
-            # 复制代码到剪贴板
+            # 复制代码到剪贴板并粘贴
             pyperclip.copy(code)
             time.sleep(0.05)
-
-            # 使用uiautomation粘贴代码
-            auto.SendKeys('{Ctrl}v')
+            keyboard.press_and_release('ctrl+v')
             time.sleep(0.05)
 
             self.gui.log("代码已通过复制粘贴完成输入")
@@ -97,16 +91,18 @@ class InputSimulator:
                     keyboard.unhook_all()
                     return False
 
-                # 点击屏幕中央激活编辑器
+                # 激活编辑器（点击屏幕中央）
                 screen_width, screen_height = pyautogui.size()
                 x = screen_width // 2
                 y = screen_height // 2
                 pyautogui.click(x=x, y=y)
-                time.sleep(0.1)
-                auto.SendKeys('{Ctrl}a')  # 全选
-                time.sleep(0.1)
-                auto.SendKeys('{Delete}')  # 删除
-                time.sleep(0.1)
+                time.sleep(0.05)
+
+                # 清空编辑器内容
+                keyboard.press_and_release('ctrl+a')
+                time.sleep(0.05)
+                keyboard.press_and_release('delete')
+                time.sleep(0.05)
 
             # 使用批量输入
             lines = text.split('\n')
@@ -127,43 +123,31 @@ class InputSimulator:
                         last_index = 0
                         for i, char in enumerate(line):
                             if char == '{':
-                                # 添加左括号前的部分（转义右括号）
+                                # 添加左括号前的部分
                                 if i > last_index:
                                     plain_part = line[last_index:i]
-                                    # 转义左括号
-                                    escaped_part = plain_part.replace('{', '{{}')
-                                    parts.append(escaped_part)
-                                # 添加左括号（转义）并删除自动补全的右括号
-                                parts.append('{')
+                                    # 直接输入普通文本
+                                    keyboard.write(plain_part)
+                                # 处理左括号：输入左括号，等待自动补全，然后删除右括号
+                                keyboard.write('{')
+                                time.sleep(0.05)  # 等待编辑器自动补全右括号
+                                keyboard.press_and_release('delete')
                                 last_index = i + 1
 
                         # 添加剩余部分
                         if last_index < len(line):
                             plain_part = line[last_index:]
-                            # 转义左括号
-                            escaped_part = plain_part.replace('{', '{{}')
-                            parts.append(escaped_part)
-
-                        # 合并并发送所有部分
-                        for part in parts:
-                            if part == '{':
-                                # 输入左括号（转义），等待自动补全，然后删除右括号
-                                auto.SendKeys('{{}')
-                                time.sleep(0.05)  # 等待编辑器自动补全右括号
-                                auto.SendKeys('{Delete}')
-                            elif part:
-                                # 发送其他部分
-                                auto.SendKeys(part)
+                            keyboard.write(plain_part)
                     else:
-                        # 没有左括号，直接发送整行（转义左括号）
-                        escaped_line = line.replace('{', '{{}')
-                        auto.SendKeys(escaped_line)
+                        # 没有左括号，直接发送整行
+                        keyboard.write(line)
 
                 # 如果是最后一行且为空行，不需要处理
                 # 如果不是最后一行，添加换行
                 if line_index < len(lines) - 1:
-                    auto.SendKeys('{Enter}')
-                    time.sleep(0.02)  # 换行后的短暂等待
+                    keyboard.press_and_release('enter')
+                    time.sleep(0.05)  # 换行后的短暂等待
+                    keyboard.press_and_release('home')
 
                 # 记录行数（包括空行）
                 if line_index < len(lines) - 1:

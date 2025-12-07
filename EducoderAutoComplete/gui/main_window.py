@@ -1,4 +1,6 @@
-﻿import tkinter as tk
+﻿import sys
+import tkinter as tk
+from tkinter import ttk, scrolledtext, messagebox
 import threading
 import queue
 import os
@@ -12,14 +14,11 @@ import socket
 import time
 import psutil
 import atexit
-import pystickynote
+import pystray
 import subprocess
-import sys
-import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageDraw
-from tkinter import ttk, scrolledtext, messagebox
 from utils.config import ConfigManager
 from core.server import ServerManager
 from gui.input_test import TestInputDialog
@@ -36,30 +35,10 @@ class EducoderGUI:
         self.token = token
         self.parent_window = parent_window  # 保存父窗口引用
 
-        # 单实例相关变量
-        self.lock_socket = None
-        self.lock_file = None
-        self.is_closing = False  # 标记是否正在关闭
-
         # 系统托盘相关变量
         self.tray_icon = None
         self.tray_thread = None
         self.is_minimized_to_tray = False
-
-        # 单实例检查
-        if self.check_other_instance():
-            # 如果已有实例运行，激活它并退出当前进程
-            self.activate_existing_instance()
-            if root:
-                root.destroy()
-            return  # 直接返回，不继续初始化
-
-        # 设置单实例锁
-        if not self.setup_single_instance():
-            if messagebox and root:
-                messagebox.showerror("错误", "无法创建单实例锁，程序可能已经运行")
-                root.destroy()
-            return
 
         # 初始化变量
         self.server_manager = None
@@ -67,6 +46,7 @@ class EducoderGUI:
         self.use_copy_paste = tk.BooleanVar(value=False)
         self.config_manager = ConfigManager()
         self.show_log_var = tk.BooleanVar(value=False)  # 默认不显示日志
+        self.is_closing = False  # 标记是否正在关闭
 
         # 注册退出时的清理函数
         atexit.register(self.cleanup_processes)
@@ -95,125 +75,6 @@ class EducoderGUI:
 
         # 程序启动时自动启动服务器
         self.auto_start_server()
-
-    def check_other_instance(self):
-        """检查是否有其他实例正在运行"""
-        try:
-            # 方法1: 使用socket连接
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(0.5)
-            result = sock.connect_ex(('localhost', 9000))
-            sock.close()
-            if result == 0:
-                return True
-        except:
-            pass
-
-        # 方法2: 检查进程
-        current_pid = os.getpid()
-        current_name = os.path.basename(sys.argv[0])
-
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-            try:
-                if proc.pid == current_pid:
-                    continue
-
-                # 检查是否是相同的Python脚本
-                cmdline = proc.cmdline()
-                if cmdline and len(cmdline) > 0:
-                    if current_name in cmdline[0] or "python" in proc.name().lower():
-                        if len(cmdline) > 1 and "educoder" in " ".join(cmdline).lower():
-                            return True
-            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                continue
-
-        return False
-
-    def setup_single_instance(self):
-        """设置单实例锁"""
-        try:
-            # 创建socket锁
-            self.lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.lock_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.lock_socket.bind(('localhost', 9000))
-            self.lock_socket.listen(1)
-
-            # 创建文件锁
-            temp_dir = tempfile.gettempdir()
-            self.lock_file = Path(temp_dir) / "educoder_assistant.lock"
-
-            # 写入当前进程ID
-            with open(self.lock_file, 'w') as f:
-                f.write(str(os.getpid()))
-
-            # 启动socket监听线程
-            threading.Thread(target=self.listen_for_activation, daemon=True).start()
-
-            return True
-        except Exception as e:
-            print(f"设置单实例锁失败: {e}")
-            return False
-
-    def listen_for_activation(self):
-        """监听激活请求"""
-        if not self.lock_socket:
-            return
-
-        while not self.is_closing:
-            try:
-                conn, addr = self.lock_socket.accept()
-                conn.settimeout(2.0)
-
-                # 接收到激活请求
-                data = conn.recv(1024)
-                if data and b"ACTIVATE" in data:
-                    # 在GUI线程中恢复窗口
-                    if self.root:
-                        self.root.after(0, self.restore_from_tray)
-
-                conn.close()
-            except socket.timeout:
-                continue
-            except Exception as e:
-                if not self.is_closing:
-                    print(f"监听激活请求出错: {e}")
-                break
-
-    def activate_existing_instance(self):
-        """激活已存在的实例"""
-        try:
-            # 连接到正在运行的实例
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(2.0)
-            sock.connect(('localhost', 9000))
-            sock.send(b"ACTIVATE")
-            sock.close()
-
-            if messagebox:
-                messagebox.showinfo("提示", "Educoder助手已经在后台运行，正在激活窗口...")
-            return True
-        except Exception as e:
-            print(f"激活已存在实例失败: {e}")
-            return False
-
-    def cleanup_single_instance(self):
-        """清理单实例锁"""
-        self.is_closing = True
-
-        # 关闭socket
-        if self.lock_socket:
-            try:
-                self.lock_socket.close()
-            except:
-                pass
-            self.lock_socket = None
-
-        # 删除文件锁
-        if self.lock_file and os.path.exists(self.lock_file):
-            try:
-                os.remove(self.lock_file)
-            except:
-                pass
 
     def setup_ui(self):
         """设置用户界面"""
@@ -817,8 +678,8 @@ class EducoderGUI:
             # 发送登出请求
             threading.Thread(target=self._perform_logout, daemon=True).start()
 
-            # 退出程序，而不是最小化到托盘
-            self.real_close()
+            # 关闭主窗口
+            self.on_close()
 
     def _perform_logout(self):
         """执行登出操作"""
@@ -862,17 +723,17 @@ class EducoderGUI:
             else:
                 # 加载ICO文件
                 image = Image.open(icon_path)
-                # 调整图标大小到合适的尺寸
-                image = image.resize((64, 64), Image.Resampling.LANCZOS)
+                # 调整图标大小到合适的尺寸（系统托盘通常使用16x16或32x32）
+                image = image.resize((32, 32), Image.Resampling.LANCZOS)
 
             # 创建菜单项
             menu_items = [
-                pystickynote.MenuItem("显示主窗口", self.restore_from_tray),
-                pystickynote.MenuItem("退出程序", self.quit_program)
+                pystray.MenuItem("显示主窗口", self.restore_from_tray),
+                pystray.MenuItem("退出程序", self.quit_program)
             ]
 
             # 创建托盘图标
-            tray_icon = pystickynote.Icon("educoder_icon", image, "Educoder助手", menu_items)
+            tray_icon = pystray.Icon("educoder_icon", image, "Educoder助手", menu_items)
 
             return tray_icon
 
@@ -891,7 +752,7 @@ class EducoderGUI:
             self.is_minimized_to_tray = True
             self.log("程序已最小化到系统托盘")
 
-            # 隐藏窗口（不销毁）
+            # 隐藏窗口
             self.root.withdraw()
 
             # 创建并运行系统托盘图标（在新线程中）
@@ -902,9 +763,6 @@ class EducoderGUI:
                 # 在新线程中运行托盘图标
                 self.tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
                 self.tray_thread.start()
-        else:
-            # 如果已经在托盘中，再次最小化时只需隐藏窗口
-            self.root.withdraw()
 
     def restore_from_tray(self):
         """从系统托盘恢复窗口"""
@@ -915,18 +773,13 @@ class EducoderGUI:
             if self.tray_icon is not None:
                 self.tray_icon.stop()
                 self.tray_icon = None
-                if self.tray_thread is not None:
-                    self.tray_thread.join(timeout=1)  # 等待线程结束
-                    self.tray_thread = None
+                self.tray_thread = None
 
             # 显示窗口
             self.root.deiconify()
             self.root.lift()
             self.root.focus_force()
             self.log("程序已从系统托盘恢复")
-
-            # 确保窗口可见并且在前台
-            self.root.update_idletasks()
 
     def cleanup_processes(self):
         """清理所有进程"""
@@ -990,9 +843,6 @@ class EducoderGUI:
         self.is_closing = True
         self.log("正在关闭应用...")
 
-        # 清理单实例锁
-        self.cleanup_single_instance()
-
         # 停止系统托盘图标
         if self.tray_icon is not None:
             self.tray_icon.stop()
@@ -1016,8 +866,7 @@ class EducoderGUI:
         self.cleanup_processes()
 
         # 关闭窗口
-        if self.root:
-            self.root.destroy()
+        self.root.destroy()
 
         # 强制退出程序
         os._exit(0)
@@ -1057,37 +906,7 @@ class EducoderGUI:
             messagebox.showerror("启动错误", f"自动启动服务器时发生错误:\n{e}")
 
 
-def simple_instance_check():
-    """简单的单实例检查"""
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(0.5)
-        result = sock.connect_ex(('localhost', 9000))
-        sock.close()
-
-        if result == 0:
-            # 已有实例在运行，尝试激活它
-            try:
-                activate_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                activate_sock.settimeout(2.0)
-                activate_sock.connect(('localhost', 9000))
-                activate_sock.send(b"ACTIVATE")
-                activate_sock.close()
-
-                print("Educoder助手已经在后台运行，正在激活窗口...")
-                return False
-            except:
-                return False
-    except:
-        pass
-    return True
-
-
 if __name__ == "__main__":
-    # 先进行单实例检查
-    if not simple_instance_check():
-        sys.exit(0)
-
     # 测试代码
     root = tk.Tk()
     app = EducoderGUI(root, "测试用户", "测试token")

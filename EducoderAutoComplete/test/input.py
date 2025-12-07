@@ -1,21 +1,10 @@
-import uiautomation as auto
+import keyboard
+import time
 
+# 模拟键盘输入文本，并等待一段时间以模拟打字速度（可选）
+keyboard.write('Hello, wor[]\n{}tr订单ld!', delay=0.05)  # delay参数定义每个字符之间的延迟时间
+time.sleep(1)  # 等待1秒，以便可以看到完整的输入效果（可选）
 
-def type_with_uiautomation(text):
-    """
-    使用uiautomation库输入中文
-    这个库可以更好地处理Windows UI自动化
-    """
-    # 获取当前焦点控件
-    control = auto.GetFocusedControl()
+# 模拟按Enter键（可选）
+keyboard.send('enter')
 
-    # 发送文本（支持Unicode）
-    if control:
-        control.SendKeys(text, interval=0.05)
-    else:
-        # 如果没有找到控件，尝试发送到桌面
-        auto.SendKeys(text, interval=0.05)
-
-
-# 使用示例
-type_with_uiautomation("sdfgdsfd")

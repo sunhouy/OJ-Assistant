@@ -136,16 +136,8 @@ class TestInputDialog:
         )
         clear_btn.pack(side=tk.LEFT)
 
-        # 检查 pyautogui 是否可用
-        try:
-            import pyautogui
-            self.pyautogui = pyautogui
-            self._add_log("PyAutoGUI 库加载成功")
-        except ImportError:
-            self.pyautogui = None
-            self.status_var.set("错误: 请安装 pyautogui (pip install pyautogui)")
-            self._add_log("PyAutoGUI 库未安装，请运行: pip install pyautogui")
-            self.start_btn.config(state="disabled")
+        self.pyautogui = pyautogui
+        self._add_log("PyAutoGUI 库加载成功")
 
         # 绑定窗口关闭事件
         self.dialog.protocol("WM_DELETE_WINDOW", self.on_closing)
