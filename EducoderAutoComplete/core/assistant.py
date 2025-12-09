@@ -182,6 +182,7 @@ class EducoderAssistant:
 
             # 直接使用前端传来的错误标记
             should_fix = has_error
+            print(should_fix)
 
             # 保存测试失败信息（直接使用test_results）
             self.test_failures = test_results
