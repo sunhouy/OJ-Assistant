@@ -1,8 +1,10 @@
-﻿import winreg
+﻿import os
 import sys
-import os
 import tkinter as tk
+import winreg
+
 from gui.login_window import LoginWindow
+
 
 def main():
     root = tk.Tk()
@@ -26,13 +28,6 @@ def set_autostart_windows_registry(app_name, path_to_exe):
 
 if __name__ == "__main__":
     app_name = "Educoder助手"
-    # 如果是.py文件
-    '''
-    python_exe = sys.executable
-    script_path = os.path.abspath(sys.argv[0])
-    path_to_exe = f'"{python_exe}" "{script_path}"'
-    '''
-    # 如果是打包后的.exe文件
     path_to_exe = os.path.abspath(sys.argv[0])
     set_autostart_windows_registry(app_name, path_to_exe)
     main()

@@ -5,7 +5,7 @@
 #define MyAppName "Educoder助手"
 #define MyAppVersion "0.1"
 #define MyAppPublisher "Sun Houyun"
-#define MyAppURL "http://101.200.216.53/educoder/"
+#define MyAppURL "https://yhsun.cn/educoder/"
 #define MyAppExeName "Educoder助手.exe"
 #define MyAppAssocName "Educoder File"
 #define MyAppAssocExt ".myp"
@@ -47,9 +47,6 @@ WizardStyle=modern
 [Languages]
 Name: "chinese"; MessagesFile: "compiler:Chinese.isl"
 
-[Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-
 [Files]
 Source: "C:\Users\sunhouyun\Desktop\Educoder\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "C:\Users\sunhouyun\Desktop\Educoder\dist\app.ico"; DestDir: "{app}"; Flags: ignoreversion
@@ -66,8 +63,11 @@ Root: HKA; Subkey: "Software\Classes\{#MyAppAssocKey}\shell\open\command"; Value
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
+[UninstallDelete]
+; 删除用户数据目录
+Type: filesandordirs; Name: "{userappdata}\EducoderAssistant"

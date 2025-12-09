@@ -1,11 +1,11 @@
-﻿import os
-import base64
+﻿import base64
 import hashlib
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
 import secrets
+
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 
 class CryptoManager:
@@ -99,8 +99,7 @@ class CryptoManager:
         """
         # 使用机器相关信息生成密码
         import platform
-        import socket
-        
+
         machine_info = [
             platform.node(),  # 计算机名
             platform.system(),  # 操作系统

@@ -1,9 +1,10 @@
-﻿import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox  # 添加这行导入
-import configparser
+﻿import configparser
 import os
-import webbrowser
+import subprocess
+import sys
+import threading
+import tkinter as tk
+from tkinter import ttk
 
 from utils.config import ConfigManager
 
@@ -15,10 +16,18 @@ class FirstRunDialog:
         self.dont_show_again = tk.BooleanVar(value=False)
         self.on_close_callback = on_close_callback  # 关闭对话框时的回调函数
 
+        # 尝试导入 extension_setup 模块
+        try:
+            from utils.extension_setup import main as run_extension_setup
+            self.EXTENSION_SETUP_AVAILABLE = True
+            self.run_extension_setup = run_extension_setup
+        except ImportError:
+            self.EXTENSION_SETUP_AVAILABLE = False
+
         # 创建对话框
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("安装浏览器扩展")
-        self.dialog.geometry("750x750")
+        self.dialog.geometry("750x850")
         # 设置背景色为白色
         self.dialog.configure(bg='white')
         self.dialog.resizable(True, True)
@@ -37,6 +46,30 @@ class FirstRunDialog:
         # 设置现代化样式
         self.setup_styles()
         self.setup_ui()
+
+    def find_extension_setup_file(self):
+        """查找extension_setup.py文件"""
+        # 尝试在当前目录查找
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        possible_paths = [
+            os.path.join(current_dir, "extension_setup.py"),
+            os.path.join(os.path.dirname(current_dir), "extension_setup.py"),
+            os.path.join(current_dir, "gui", "extension_setup.py"),
+            os.path.join(current_dir, "tools", "extension_setup.py"),
+            os.path.join(current_dir, "utils", "extension_setup.py"),  # 添加utils路径
+        ]
+
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+
+        # 如果在固定位置找不到，尝试搜索整个项目
+        project_root = os.path.dirname(current_dir)
+        for root, dirs, files in os.walk(project_root):
+            if "extension_setup.py" in files:
+                return os.path.join(root, "extension_setup.py")
+
+        return None
 
     def setup_styles(self):
         """设置现代化样式"""
@@ -172,14 +205,11 @@ class FirstRunDialog:
         )
         why_section.pack(anchor='w', pady=(0, 10))
 
-        why_text = """浏览器扩展是连接 Educoder 助手和头歌平台的桥梁，它可以：
-• 自动读取题目要求和测试用例
-• 将代码发送到本地服务器进行测试
-• 将测试结果返回并显示在页面上
-• 实现自动化代码输入和测试功能
-
-没有扩展插件，Educoder 助手将无法正常工作！"""
-
+        why_text = """没有扩展插件，Educoder 助手无法正常工作
+您可以选择手动安装或自动安装的方式，
+手动安装后，您只需保持本客户端是启动状态，即可在
+您安装拓展的浏览器使用Educoder助手
+自动安装的拓展必须每次通过主页的“启动浏览器”启动"""
         why_label = ttk.Label(
             scrollable_frame,
             text=why_text,
@@ -195,8 +225,7 @@ class FirstRunDialog:
         )
         steps_section.pack(anchor='w', pady=(0, 10))
 
-        steps_text = """1. 选择您要安装扩展的浏览器
-2. 点击下方"跳转安装扩展"按钮"""
+        steps_text = """点击下方"跳转安装扩展"按钮开始安装"""
 
         steps_label = ttk.Label(
             scrollable_frame,
@@ -228,7 +257,7 @@ class FirstRunDialog:
         chrome_icon.pack(side='left', padx=(0, 10))
 
         chrome_text = ttk.Label(chrome_frame,
-                                text="Google Chrome (推荐)",
+                                text="Google Chrome",
                                 style='Normal.TLabel',
                                 font=('微软雅黑', 10, 'bold'))
         chrome_text.pack(side='left')
@@ -261,7 +290,7 @@ class FirstRunDialog:
                                 fg='#e74c3c')
         warning_icon.pack(side='left', padx=(0, 10))
 
-        warning_text = """本应用仅供学习交流使用，不得用于商业和非法用途。"""   # 重要提示
+        warning_text = """本应用仅供学习交流使用，不得用于商业和非法用途。"""  # 重要提示
 
         warning_label = ttk.Label(warning_frame,
                                   text=warning_text,
@@ -327,86 +356,49 @@ class FirstRunDialog:
         self.dialog.after(100, lambda: self.dialog.focus_force())
 
     def open_extension_install(self):
-        """打开扩展安装页面"""
-        # 这里可以打开浏览器检测和安装工具，或者直接打开安装页面
-        # 由于我们不知道用户具体使用哪个浏览器，可以打开一个通用的引导页面
-        # 或者让用户选择浏览器
+        """打开浏览器扩展安装工具"""
+        try:
+            if not hasattr(self, 'EXTENSION_SETUP_AVAILABLE') or not self.EXTENSION_SETUP_AVAILABLE:
+                # 如果无法导入，尝试使用子进程方式
+                script_path = self.find_extension_setup_file()
+                if script_path and os.path.exists(script_path):
+                    python_exe = sys.executable
+                    subprocess.Popen([python_exe, script_path],
+                                     creationflags=subprocess.CREATE_NEW_CONSOLE)
+                else:
+                    raise ImportError("无法找到 extension_setup.py 文件")
+            else:
+                # 在新线程中运行扩展安装工具，避免阻塞主界面
+                threading.Thread(
+                    target=self._run_extension_setup_thread,
+                    daemon=True
+                ).start()
 
-        # 创建一个简单的选择对话框
-        browser_dialog = tk.Toplevel(self.dialog)
-        browser_dialog.title("选择浏览器")
-        browser_dialog.geometry("400x400")
-        browser_dialog.configure(bg='white')
-        browser_dialog.transient(self.dialog)
-        browser_dialog.grab_set()
+        except Exception as e:
+            # 显示错误信息
+            messagebox.showerror("错误", f"无法打开扩展安装工具:\n{str(e)}")
 
-        # 居中显示
-        browser_dialog.update_idletasks()
-        x = self.dialog.winfo_x() + (self.dialog.winfo_width() - 400) // 2
-        y = self.dialog.winfo_y() + (self.dialog.winfo_height() - 200) // 2
-        browser_dialog.geometry(f"400x400+{x}+{y}")
-
-        # 内容
-        content_frame = ttk.Frame(browser_dialog, padding="20")
-        content_frame.pack(fill=tk.BOTH, expand=True)
-
-        ttk.Label(content_frame,
-                  text="请选择您要安装扩展的浏览器：",
-                  font=('微软雅黑', 11)).pack(pady=(0, 20))
-
-        # Chrome按钮
-        chrome_button = ttk.Button(
-            content_frame,
-            text="Google Chrome",
-            command=lambda: self.open_chrome_install(browser_dialog),
-            style='Action.TButton',
-            width=20
-        )
-        chrome_button.pack(pady=5)
-
-        # Edge按钮
-        edge_button = ttk.Button(
-            content_frame,
-            text="Microsoft Edge",
-            command=lambda: self.open_edge_install(browser_dialog),
-            style='Action.TButton',
-            width=20
-        )
-        edge_button.pack(pady=5)
-
-        # 取消按钮
-        cancel_button = ttk.Button(
-            content_frame,
-            text="取消",
-            command=browser_dialog.destroy,
-            style='Action.TButton',
-            width=10
-        )
-        cancel_button.pack(pady=(10, 0))
-
-    def open_chrome_install(self, browser_dialog):
-        """打开Chrome扩展安装页面"""
-        browser_dialog.destroy()
-        webbrowser.open("http://yhsun.cn/educoder/chrome.html")
-        self.show_install_instructions("Chrome")
-
-    def open_edge_install(self, browser_dialog):
-        """打开Edge扩展安装页面"""
-        browser_dialog.destroy()
-        webbrowser.open("http://yhsun.cn/educoder/edge.html")
-        self.show_install_instructions("Edge")
-
-    def show_install_instructions(self, browser_name):
-        """显示安装完成后的提示"""
-        messagebox.showinfo(
-            "安装提示",
-            f"{browser_name}扩展安装页面已打开！\n\n"
-            "请在打开的页面中：\n"
-            "1. 点击\"添加扩展\"按钮\n"
-            "2. 安装完成后刷新头歌平台页面\n"
-            "3. 返回此窗口点击\"我已安装扩展\"按钮",
-            parent=self.dialog
-        )
+    def _run_extension_setup_thread(self):
+        """在新线程中运行扩展安装工具"""
+        try:
+            # 直接运行扩展安装工具的main函数
+            self.run_extension_setup()
+        except Exception as e:
+            # 如果直接运行失败，尝试使用子进程
+            try:
+                script_path = self.find_extension_setup_file()
+                if script_path and os.path.exists(script_path):
+                    python_exe = sys.executable
+                    subprocess.Popen([python_exe, script_path],
+                                     creationflags=subprocess.CREATE_NEW_CONSOLE)
+                else:
+                    raise e
+            except Exception as e2:
+                # 在GUI线程中显示错误信息
+                self.dialog.after(0, lambda: messagebox.showerror(
+                    "错误",
+                    f"无法打开扩展安装工具:\n{str(e2)}"
+                ))
 
     def on_confirm(self):
         """确定按钮点击事件"""

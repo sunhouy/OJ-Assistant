@@ -1,44 +1,96 @@
-﻿import sys
-import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
-import threading
-import queue
-import os
-import asyncio
-import websockets
-import json
-import urllib.request
-import urllib.error
-import webbrowser
-import socket
-import time
-import psutil
+﻿import asyncio
 import atexit
-import pystray
+import json
+import os
+import queue
+import socket
 import subprocess
-from pathlib import Path
+import sys
+import threading
+import time
+import tkinter as tk
+import urllib.error
+import urllib.request
+import webbrowser
+from tkinter import ttk, scrolledtext, messagebox
 
-from PIL import Image, ImageDraw
-from utils.config import ConfigManager
+import psutil
+import requests
+import websockets
+
 from core.server import ServerManager
 from gui.input_test import TestInputDialog
+from utils.config import ConfigManager
 
-TRAY_AVAILABLE = True
+# 导入 extension_setup 模块
+try:
+    from utils.extension_setup import main as run_extension_setup
+
+    EXTENSION_SETUP_AVAILABLE = True
+except ImportError:
+    EXTENSION_SETUP_AVAILABLE = False
+
+
+def check_existing_instance():
+    """检查是否已有实例在运行"""
+    try:
+        # 尝试连接WebSocket服务器
+        response = requests.get("http://localhost:8000/status", timeout=2)
+        if response.status_code == 200:
+            return True
+    except:
+        pass
+
+    # 检查端口占用
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex(('localhost', 8000))
+        sock.close()
+        if result == 0:
+            return True
+    except:
+        pass
+
+    return False
+
+
+def activate_existing_instance():
+    """激活已运行的实例"""
+    try:
+        # 尝试通过WebSocket激活
+        asyncio.run(send_activate_signal())
+        return True
+    except:
+        try:
+            # 如果WebSocket失败，尝试通过HTTP激活
+            response = requests.post("http://localhost:8000/activate", timeout=2)
+            if response.status_code == 200:
+                return True
+        except:
+            pass
+    return False
+
+
+async def send_activate_signal():
+    """发送激活信号到已运行的实例"""
+    try:
+        async with websockets.connect("ws://localhost:8000", timeout=2) as websocket:
+            await websocket.send(json.dumps({"action": "activate_window"}))
+            return True
+    except:
+        return False
 
 
 class EducoderGUI:
     CURRENT_VERSION = "0.1"  # 当前应用版本号
 
-    def __init__(self, root, username, token, parent_window=None):
+    def __init__(self, root, username, token, machine_code=None, parent_window=None):
         self.root = root
         self.username = username
         self.token = token
+        self.machine_code = machine_code  # 保存机器码
         self.parent_window = parent_window  # 保存父窗口引用
-
-        # 系统托盘相关变量
-        self.tray_icon = None
-        self.tray_thread = None
-        self.is_minimized_to_tray = False
 
         # 初始化变量
         self.server_manager = None
@@ -47,6 +99,16 @@ class EducoderGUI:
         self.config_manager = ConfigManager()
         self.show_log_var = tk.BooleanVar(value=False)  # 默认不显示日志
         self.is_closing = False  # 标记是否正在关闭
+
+        # 会员状态相关变量
+        self.is_member = False
+        self.member_expire_date = ""
+        self.member_check_thread = None
+        self.member_status_checked = False
+        self.member_expired = False  # 新增：标记会员是否到期
+
+        # API基础URL
+        self.BASE_URL = 'http://yhsun.cn/server/index.php'
 
         # 注册退出时的清理函数
         atexit.register(self.cleanup_processes)
@@ -59,7 +121,7 @@ class EducoderGUI:
 
         # 设置窗口属性
         self.root.title("Educoder助手")
-        self.root.geometry("850x550")  # 增加宽度以适应语言选择
+        self.root.geometry("850x500")  # 增加高度以适应会员状态区域
         self.root.resizable(True, True)
 
         # 设置关闭窗口的处理
@@ -73,8 +135,8 @@ class EducoderGUI:
         self.root.lift()
         self.root.focus_force()
 
-        # 程序启动时自动启动服务器
-        self.auto_start_server()
+        # 先检查会员状态，然后根据状态决定是否启动服务器
+        self.check_member_status_and_start()
 
     def setup_ui(self):
         """设置用户界面"""
@@ -86,7 +148,7 @@ class EducoderGUI:
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(4, weight=1)  # 日志区域可扩展
+        main_frame.rowconfigure(5, weight=1)  # 日志区域可扩展
 
         # 用户信息区域
         user_frame = ttk.Frame(main_frame)
@@ -103,14 +165,47 @@ class EducoderGUI:
         ttk.Button(button_frame, text="输入测试", command=self.open_test_input_dialog, width=10).pack(side=tk.LEFT,
                                                                                                       padx=2)
         ttk.Button(button_frame, text="检测更新", command=self.check_update, width=10).pack(side=tk.LEFT, padx=2)
-        # 新增：安装拓展按钮
-        ttk.Button(button_frame, text="安装拓展", command=self.open_extension_setup, width=10).pack(side=tk.LEFT,
-                                                                                                    padx=2)
+
+        ttk.Button(button_frame, text="启动浏览器", command=self.open_extension_setup, width=10).pack(side=tk.LEFT,
+                                                                                                      padx=2)
         ttk.Button(button_frame, text="退出登录", command=self.logout, width=10).pack(side=tk.LEFT, padx=2)
+
+        # 会员状态区域
+        member_status_frame = ttk.Frame(main_frame)
+        member_status_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+
+        # 会员状态标签 - 使用红色字体显示到期信息
+        self.member_status_var = tk.StringVar(value="正在检查会员状态...")
+        self.member_status_label = ttk.Label(
+            member_status_frame,
+            textvariable=self.member_status_var,
+            font=("微软雅黑", 10)
+        )
+        self.member_status_label.grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+
+        # 开通会员按钮
+        self.member_button = ttk.Button(
+            member_status_frame,
+            text="开通会员",
+            command=self.open_member_page,
+            width=10,
+            state="disabled"  # 初始状态为禁用，等检查完会员状态后再启用
+        )
+        self.member_button.grid(row=0, column=1, sticky=tk.E, padx=(0, 5))
+
+        # 新增激活会员按钮
+        self.activate_button = ttk.Button(
+            member_status_frame,
+            text="激活会员",
+            command=self.open_activate_dialog,
+            width=10,
+            state="normal"
+        )
+        self.activate_button.grid(row=0, column=2, sticky=tk.E)
 
         # 配置选项区域
         options_frame = ttk.Frame(main_frame)
-        options_frame.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=5)
+        options_frame.grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=5)
 
         # 复制粘贴模式选项
         ttk.Checkbutton(
@@ -149,20 +244,20 @@ class EducoderGUI:
 
         # 服务器控制区域
         server_frame = ttk.LabelFrame(main_frame, text="服务器控制", padding="5")
-        server_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
+        server_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
         server_frame.columnconfigure(1, weight=1)
 
-        self.server_status_var = tk.StringVar(value="服务器状态: 未启动")
+        self.server_status_var = tk.StringVar(value="服务器状态: 等待会员状态检查...")
         ttk.Label(server_frame, textvariable=self.server_status_var).grid(row=0, column=0, sticky=tk.W)
 
-        self.start_button = ttk.Button(server_frame, text="启动服务器", command=self.start_server)
+        self.start_button = ttk.Button(server_frame, text="启动服务器", command=self.start_server, state="disabled")
         self.start_button.grid(row=0, column=1, padx=5)
 
         self.stop_button = ttk.Button(server_frame, text="停止服务器", command=self.stop_server, state="disabled")
         self.stop_button.grid(row=0, column=2, padx=5)
 
         # 连接信息
-        ttk.Label(server_frame, text="WebSocket 地址: ws://localhost:8000").grid(
+        ttk.Label(server_frame, text="使用浏览器拓展前必须启动本地服务器").grid(
             row=1, column=0, columnspan=3, sticky=tk.W, pady=2
         )
 
@@ -174,13 +269,13 @@ class EducoderGUI:
         self.current_lang_label.grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=2)
 
         # 状态显示
-        self.status_var = tk.StringVar(value="准备就绪")
+        self.status_var = tk.StringVar(value="正在检查会员状态...")
         status_label = ttk.Label(main_frame, textvariable=self.status_var)
-        status_label.grid(row=3, column=0, columnspan=3, sticky=tk.W, pady=5)
+        status_label.grid(row=4, column=0, columnspan=3, sticky=tk.W, pady=5)
 
         # 日志区域（默认隐藏）
         self.log_frame = ttk.LabelFrame(main_frame, text="日志输出", padding="5")
-        self.log_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        self.log_frame.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
         self.log_frame.columnconfigure(0, weight=1)
         self.log_frame.rowconfigure(0, weight=1)
 
@@ -195,6 +290,252 @@ class EducoderGUI:
 
         # 记录初始语言设置
         self.log(f"初始语言设置为: {self.selected_language.get().upper()}")
+
+    def check_member_status_and_start(self):
+        """检查会员状态并根据状态决定是否启动服务器"""
+        if not self.username or not self.machine_code:
+            self.member_status_var.set("无法检查会员状态：缺少用户信息或机器码")
+            self.member_button.config(state="normal")  # 即使检查失败也允许用户尝试开通会员
+            self.activate_button.config(state="normal")  # 激活按钮也启用
+            self.start_button.config(state="disabled")
+            self.status_var.set("无法检查会员状态，服务器启动已禁用")
+            return
+
+        # 在新线程中检查会员状态
+        self.member_check_thread = threading.Thread(
+            target=self._check_member_status_and_start_thread,
+            daemon=True
+        )
+        self.member_check_thread.start()
+
+    def _check_member_status_and_start_thread(self):
+        """在新线程中检查会员状态并根据状态决定是否启动服务器"""
+        try:
+            api_base_url = self.BASE_URL
+            url = f"{api_base_url}?action=check_member"
+            data = {
+                'username': self.username,
+                'machine_code': self.machine_code
+            }
+
+            response = requests.post(url, json=data, timeout=10)
+            result = response.json()
+
+            if result.get('code') == 200:
+                member_data = result.get('data', {})
+                self.is_member = member_data.get('is_member', False)
+                self.member_expire_date = member_data.get('expire_date', '')
+                self.member_status_checked = True
+
+                # 检查会员是否到期
+                if self.member_expire_date:
+                    try:
+                        # 假设日期格式为 YYYY-MM-DD
+                        expire_date = time.strptime(self.member_expire_date, "%Y-%m-%d")
+                        current_date = time.localtime()
+                        self.member_expired = expire_date < current_date
+                    except:
+                        # 如果日期解析失败，根据is_member判断
+                        self.member_expired = not self.is_member
+                else:
+                    self.member_expired = not self.is_member
+
+                # 更新UI
+                self.root.after(0, self._update_member_status_and_start)
+            else:
+                self.root.after(0, lambda: self._handle_member_check_error(result.get('message', '检查会员状态失败')))
+
+        except requests.exceptions.Timeout:
+            self.root.after(0, lambda: self._handle_member_check_error("请求超时，请检查网络连接"))
+        except requests.exceptions.ConnectionError:
+            self.root.after(0, lambda: self._handle_member_check_error("网络连接错误，请检查网络连接"))
+        except Exception as e:
+            self.root.after(0, lambda: self._handle_member_check_error(f"请求失败: {str(e)}"))
+
+    def _update_member_status_and_start(self):
+        """更新会员状态UI并根据状态决定是否启动服务器"""
+        if self.is_member and not self.member_expired:
+            if self.member_expire_date:
+                self.member_status_var.set(f"会员有效期至: {self.member_expire_date}")
+                self.member_button.config(state="normal", text="续费会员")
+                # 会员有效，启用启动按钮
+                self.start_button.config(state="normal")
+                # 自动启动服务器
+                self.auto_start_server()
+            else:
+                self.member_status_var.set("会员用户")
+                self.member_button.config(state="normal", text="续费会员")
+                # 会员有效，启用启动按钮
+                self.start_button.config(state="normal")
+                # 自动启动服务器
+                self.auto_start_server()
+        else:
+            # 会员已到期或不是会员
+            if self.member_expire_date:
+                # 会员已到期
+                self.member_status_var.set(f"会员已到期: {self.member_expire_date}")
+                # 设置红色字体
+                self.member_status_label.config(foreground="red")
+            else:
+                # 不是会员用户
+                self.member_status_var.set("非会员用户")
+
+            self.member_button.config(state="normal", text="开通会员")
+            # 会员到期，禁用启动按钮
+            self.start_button.config(state="disabled")
+            # 显示醒目的红色提示
+            self.status_var.set("会员已到期，请开通会员后启动服务器")
+            # 在日志中也记录
+            self.log("会员已到期，无法启动服务器。请开通会员后再试。")
+
+        # 激活按钮始终可用
+        self.activate_button.config(state="normal")
+
+        self.log(f"会员状态检查完成: {'会员' if self.is_member and not self.member_expired else '非会员或已到期'}")
+
+    def _handle_member_check_error(self, error_message):
+        """处理会员状态检查错误"""
+        self.member_status_var.set(f"会员状态检查失败: {error_message}")
+        self.member_button.config(state="normal")  # 允许用户尝试开通会员
+        self.activate_button.config(state="normal")  # 激活按钮也启用
+        self.start_button.config(state="disabled")  # 检查失败时禁用启动按钮
+        self.log(f"会员状态检查失败: {error_message}")
+        self.status_var.set("会员状态检查失败，服务器启动已禁用")
+
+    def activate_member(self, username, code):
+        """
+        开通会员
+        :param username: 用户名
+        :param code: 授权码
+        :return: 响应结果
+        """
+        url = f'{self.BASE_URL}?action=activate_member'
+        data = {
+            'username': username,
+            'code': code
+        }
+        try:
+            response = requests.post(url, json=data)
+            return response.json()
+        except Exception as e:
+            return {
+                'code': 500,
+                'message': '请求失败',
+                'error': str(e)
+            }
+
+    def open_member_page(self):
+        """打开会员页面"""
+        webbrowser.open("https://yhsun.cn/server/member")
+        self.log("已打开会员页面")
+        self.status_var.set("已打开会员页面")
+
+    def open_activate_dialog(self):
+        """打开激活会员对话框"""
+        # 创建自定义对话框
+        dialog = tk.Toplevel(self.root)
+        dialog.title("激活会员")
+        dialog.geometry("450x250")
+        dialog.resizable(True, True)
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # 设置窗口居中
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (dialog.winfo_screenheight() // 2) - (height // 2)
+        dialog.geometry(f'{width}x{height}+{x}+{y}')
+
+        # 创建主框架
+        main_frame = ttk.Frame(dialog, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # 用户名显示
+        ttk.Label(main_frame, text=f"用户名: {self.username}", font=('TkDefaultFont', 10)).grid(
+            row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 15)
+        )
+
+        # 授权码输入
+        ttk.Label(main_frame, text="授权码:").grid(row=1, column=0, sticky=tk.W, pady=(0, 15))
+
+        code_var = tk.StringVar()
+        code_entry = ttk.Entry(main_frame, textvariable=code_var, width=30)
+        code_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=(0, 15), padx=(10, 0))
+        code_entry.focus_set()
+
+        # 激活成功后的提示
+        self.activate_status_var = tk.StringVar(value="")
+        activate_status_label = ttk.Label(main_frame, textvariable=self.activate_status_var, foreground="green")
+        activate_status_label.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=(0, 10))
+
+        # 按钮区域
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=3, column=0, columnspan=2, pady=(10, 0))
+
+        def activate():
+            """执行激活操作"""
+            code = code_var.get().strip()
+            if not code:
+                messagebox.showwarning("输入错误", "请输入授权码！")
+                return
+
+            # 禁用按钮防止重复点击
+            activate_button.config(state="disabled")
+            cancel_button.config(state="disabled")
+            self.activate_status_var.set("正在激活中...")
+
+            # 在新线程中执行激活请求
+            def activate_thread():
+                try:
+                    result = self.activate_member(self.username, code)
+
+                    def handle_result():
+                        if result.get('code') == 200:
+                            self.activate_status_var.set("激活成功！正在重新检查会员状态...")
+                            # 激活成功，先停止服务器（如果正在运行）
+                            self.stop_server()
+                            # 延迟500毫秒确保服务器完全停止，然后重新检查会员状态
+                            self.root.after(500, self.check_member_status_and_start)
+                            # 延迟关闭对话框，让用户看到成功信息
+                            self.root.after(2000, dialog.destroy)
+                        else:
+                            self.activate_status_var.set("激活失败，请检查授权码！")
+                            # 重新启用按钮
+                            activate_button.config(state="normal")
+                            cancel_button.config(state="normal")
+
+                    dialog.after(0, handle_result)
+                except Exception as e:
+                    def handle_error():
+                        self.activate_status_var.set(f"激活过程中发生错误: {str(e)}")
+                        # 重新启用按钮
+                        activate_button.config(state="normal")
+                        cancel_button.config(state="normal")
+
+                    dialog.after(0, handle_error)
+
+            threading.Thread(target=activate_thread, daemon=True).start()
+
+        def cancel():
+            """取消激活"""
+            dialog.destroy()
+
+        activate_button = ttk.Button(button_frame, text="激活", command=activate, width=10)
+        activate_button.pack(side=tk.LEFT, padx=(0, 10))
+
+        cancel_button = ttk.Button(button_frame, text="取消", command=cancel, width=10)
+        cancel_button.pack(side=tk.LEFT)
+
+        # 绑定回车键到激活按钮
+        dialog.bind('<Return>', lambda event: activate())
+
+        # 窗口关闭事件
+        def on_closing():
+            dialog.destroy()
+
+        dialog.protocol("WM_DELETE_WINDOW", on_closing)
 
     def on_language_changed(self, *args):
         """当语言选择改变时调用"""
@@ -224,34 +565,55 @@ class EducoderGUI:
     def open_extension_setup(self):
         """打开浏览器扩展安装工具"""
         try:
-            # 查找extension_setup.py文件
-            script_path = self.find_extension_setup_file()
-
-            if script_path and os.path.exists(script_path):
-                self.log(f"正在打开扩展安装工具: {script_path}")
-
-                # 使用系统默认的Python解释器运行脚本
-                if sys.platform == "win32":
-                    # Windows系统
+            if not EXTENSION_SETUP_AVAILABLE:
+                # 如果无法导入，尝试使用子进程方式
+                script_path = self.find_extension_setup_file()
+                if script_path and os.path.exists(script_path):
                     python_exe = sys.executable
                     subprocess.Popen([python_exe, script_path],
                                      creationflags=subprocess.CREATE_NEW_CONSOLE)
+                    self.log("扩展安装工具已启动")
+                    self.status_var.set("扩展安装工具已打开")
                 else:
-                    # Linux/Mac系统
-                    subprocess.Popen([sys.executable, script_path])
-
-                self.log("扩展安装工具已启动")
-                self.status_var.set("扩展安装工具已打开")
-
+                    raise ImportError("无法找到 extension_setup.py 文件")
             else:
-                # 如果找不到文件，显示简单的扩展安装说明
-                self.log("未找到extension_setup.py文件，显示扩展安装说明")
-                self.show_extension_instructions()
+                # 在新线程中运行扩展安装工具，避免阻塞主界面
+                threading.Thread(
+                    target=self._run_extension_setup_thread,
+                    daemon=True
+                ).start()
 
         except Exception as e:
             self.log(f"打开扩展安装工具时出错: {e}")
             messagebox.showerror("错误", f"无法打开扩展安装工具:\n{str(e)}")
             self.status_var.set("打开扩展安装工具失败")
+
+    def _run_extension_setup_thread(self):
+        """在新线程中运行扩展安装工具"""
+        try:
+            # 直接运行扩展安装工具的main函数
+            run_extension_setup()
+            self.log("扩展安装工具已启动")
+            self.status_var.set("扩展安装工具已打开")
+        except Exception as e:
+            # 如果直接运行失败，尝试使用子进程
+            try:
+                script_path = self.find_extension_setup_file()
+                if script_path and os.path.exists(script_path):
+                    python_exe = sys.executable
+                    subprocess.Popen([python_exe, script_path],
+                                     creationflags=subprocess.CREATE_NEW_CONSOLE)
+                    self.log("扩展安装工具已启动")
+                    self.status_var.set("扩展安装工具已打开")
+                else:
+                    raise e
+            except Exception as e2:
+                self.log(f"打开扩展安装工具时出错: {e2}")
+                self.root.after(0, lambda: messagebox.showerror(
+                    "错误",
+                    f"无法打开扩展安装工具:\n{str(e2)}"
+                ))
+                self.status_var.set("打开扩展安装工具失败")
 
     def find_extension_setup_file(self):
         """查找extension_setup.py文件"""
@@ -262,6 +624,7 @@ class EducoderGUI:
             os.path.join(os.path.dirname(current_dir), "extension_setup.py"),
             os.path.join(current_dir, "gui", "extension_setup.py"),
             os.path.join(current_dir, "tools", "extension_setup.py"),
+            os.path.join(current_dir, "utils", "extension_setup.py"),  # 添加utils路径
         ]
 
         for path in possible_paths:
@@ -275,108 +638,6 @@ class EducoderGUI:
                 return os.path.join(root, "extension_setup.py")
 
         return None
-
-    def show_extension_instructions(self):
-        """显示扩展安装说明"""
-        try:
-            # 创建一个新的顶级窗口
-            extension_window = tk.Toplevel(self.root)
-            extension_window.title("浏览器扩展安装说明")
-            extension_window.geometry("500x400")
-
-            # 主框架
-            main_frame = ttk.Frame(extension_window, padding="20")
-            main_frame.pack(fill=tk.BOTH, expand=True)
-
-            # 标题
-            title_label = ttk.Label(
-                main_frame,
-                text="浏览器扩展安装说明",
-                font=("微软雅黑", 16, "bold")
-            )
-            title_label.pack(pady=(0, 20))
-
-            # 说明文本区域
-            instructions_text = """
-请按照以下步骤安装浏览器扩展：
-
-1. 打开浏览器（Chrome或Edge）
-
-2. 根据浏览器类型打开对应链接：
-   - Chrome浏览器: http://yhsun.cn/educoder/chrome.html
-   - Edge浏览器: http://yhsun.cn/educoder/edge.html
-
-3. 按照页面上的指示完成扩展安装
-
-4. 安装完成后，刷新Educoder页面即可使用
-
-注意：
-- 请确保已安装并运行本助手程序
-- 扩展安装需要浏览器权限，请允许相关提示
-- 如果遇到问题，请重新启动浏览器
-"""
-
-            # 创建滚动文本区域
-            text_frame = ttk.Frame(main_frame)
-            text_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
-
-            text_widget = scrolledtext.ScrolledText(
-                text_frame,
-                wrap=tk.WORD,
-                font=("微软雅黑", 10)
-            )
-            text_widget.pack(fill=tk.BOTH, expand=True)
-            text_widget.insert('1.0', instructions_text)
-            text_widget.config(state='disabled')
-
-            # 按钮框架
-            button_frame = ttk.Frame(main_frame)
-            button_frame.pack(fill=tk.X)
-
-            # 复制Chrome链接按钮
-            def copy_chrome_link():
-                self.root.clipboard_clear()
-                self.root.clipboard_append("http://yhsun.cn/educoder/chrome.html")
-                messagebox.showinfo("成功", "Chrome扩展链接已复制到剪贴板", parent=extension_window)
-
-            ttk.Button(
-                button_frame,
-                text="复制Chrome链接",
-                command=copy_chrome_link
-            ).pack(side=tk.LEFT, padx=(0, 10))
-
-            # 复制Edge链接按钮
-            def copy_edge_link():
-                self.root.clipboard_clear()
-                self.root.clipboard_append("http://yhsun.cn/educoder/edge.html")
-                messagebox.showinfo("成功", "Edge扩展链接已复制到剪贴板", parent=extension_window)
-
-            ttk.Button(
-                button_frame,
-                text="复制Edge链接",
-                command=copy_edge_link
-            ).pack(side=tk.LEFT, padx=(0, 10))
-
-            # 关闭按钮
-            ttk.Button(
-                button_frame,
-                text="关闭",
-                command=extension_window.destroy
-            ).pack(side=tk.RIGHT)
-
-            # 居中显示窗口
-            extension_window.update_idletasks()
-            width = extension_window.winfo_width()
-            height = extension_window.winfo_height()
-            x = (extension_window.winfo_screenwidth() // 2) - (width // 2)
-            y = (extension_window.winfo_screenheight() // 2) - (height // 2)
-            extension_window.geometry(f'{width}x{height}+{x}+{y}')
-
-            self.log("扩展安装说明已显示")
-
-        except Exception as e:
-            self.log(f"显示扩展安装说明时出错: {e}")
-            messagebox.showerror("错误", f"无法显示扩展安装说明:\n{str(e)}")
 
     def process_log_queue(self):
         """处理日志队列"""
@@ -638,6 +899,20 @@ class EducoderGUI:
 
     def start_server(self):
         """启动WebSocket服务器"""
+        # 检查会员状态
+        if self.member_status_checked and (not self.is_member or self.member_expired):
+            # 会员到期，显示红色提示
+            self.member_status_label.config(foreground="red")
+            self.status_var.set("会员已到期，请开通会员后启动服务器")
+            messagebox.showwarning("会员到期", "您的会员已到期，请开通会员后再启动服务器！")
+            self.log("启动服务器失败：会员已到期")
+            return False
+
+        if not self.member_status_checked:
+            self.status_var.set("请等待会员状态检查完成")
+            messagebox.showwarning("检查中", "请等待会员状态检查完成后再启动服务器")
+            return False
+
         try:
             # 使用硬编码的API Key
             self.server_manager = ServerManager(self)
@@ -662,7 +937,11 @@ class EducoderGUI:
         """停止WebSocket服务器"""
         if self.server_manager:
             self.server_manager.stop()
-            self.start_button.config(state="normal")
+            # 根据会员状态决定是否启用启动按钮
+            if self.member_status_checked and self.is_member and not self.member_expired:
+                self.start_button.config(state="normal")
+            else:
+                self.start_button.config(state="disabled")
             self.stop_button.config(state="disabled")
             self.server_status_var.set("服务器状态: 停止中...")
             self.status_var.set("服务器停止中...")
@@ -675,11 +954,7 @@ class EducoderGUI:
     def logout(self):
         """用户退出登录"""
         if messagebox.askyesno("确认", "确定要退出登录吗？"):
-            # 发送登出请求
-            threading.Thread(target=self._perform_logout, daemon=True).start()
-
-            # 关闭主窗口
-            self.on_close()
+            self.real_close()
 
     def _perform_logout(self):
         """执行登出操作"""
@@ -689,7 +964,7 @@ class EducoderGUI:
             asyncio.set_event_loop(loop)
 
             async def logout():
-                async with websockets.connect("ws://localhost:8001") as websocket:
+                async with websockets.connect("ws://localhost:8000") as websocket:
                     await websocket.send(json.dumps({
                         'action': 'logout',
                         'username': self.username,
@@ -700,86 +975,6 @@ class EducoderGUI:
             loop.close()
         except:
             pass  # 忽略登出错误
-
-    def create_tray_icon(self):
-        """创建系统托盘图标，使用app.ico文件"""
-        if not TRAY_AVAILABLE:
-            return None
-
-        try:
-            # 尝试从app.ico文件加载图标
-            icon_path = "app.ico"
-
-            # 如果当前目录没有，尝试在父目录查找
-            if not os.path.exists(icon_path):
-                current_dir = os.path.dirname(os.path.abspath(__file__))
-                icon_path = os.path.join(os.path.dirname(current_dir), "app.ico")
-
-            if not os.path.exists(icon_path):
-                # 如果还是没有，创建一个简单的图标
-                image = Image.new('RGBA', (64, 64), (50, 50, 200, 255))
-                draw = ImageDraw.Draw(image)
-                draw.text((10, 25), "ED", fill=(255, 255, 255, 255))
-            else:
-                # 加载ICO文件
-                image = Image.open(icon_path)
-                # 调整图标大小到合适的尺寸（系统托盘通常使用16x16或32x32）
-                image = image.resize((32, 32), Image.Resampling.LANCZOS)
-
-            # 创建菜单项
-            menu_items = [
-                pystray.MenuItem("显示主窗口", self.restore_from_tray),
-                pystray.MenuItem("退出程序", self.quit_program)
-            ]
-
-            # 创建托盘图标
-            tray_icon = pystray.Icon("educoder_icon", image, "Educoder助手", menu_items)
-
-            return tray_icon
-
-        except Exception as e:
-            self.log(f"创建系统托盘图标失败: {e}")
-            return None
-
-    def minimize_to_tray(self):
-        """最小化到系统托盘"""
-        if not TRAY_AVAILABLE:
-            self.log("系统托盘功能不可用，将直接退出程序")
-            self.real_close()
-            return
-
-        if not self.is_minimized_to_tray:
-            self.is_minimized_to_tray = True
-            self.log("程序已最小化到系统托盘")
-
-            # 隐藏窗口
-            self.root.withdraw()
-
-            # 创建并运行系统托盘图标（在新线程中）
-            if self.tray_icon is None:
-                self.tray_icon = self.create_tray_icon()
-
-            if self.tray_icon is not None:
-                # 在新线程中运行托盘图标
-                self.tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
-                self.tray_thread.start()
-
-    def restore_from_tray(self):
-        """从系统托盘恢复窗口"""
-        if self.is_minimized_to_tray:
-            self.is_minimized_to_tray = False
-
-            # 停止系统托盘图标
-            if self.tray_icon is not None:
-                self.tray_icon.stop()
-                self.tray_icon = None
-                self.tray_thread = None
-
-            # 显示窗口
-            self.root.deiconify()
-            self.root.lift()
-            self.root.focus_force()
-            self.log("程序已从系统托盘恢复")
 
     def cleanup_processes(self):
         """清理所有进程"""
@@ -823,17 +1018,8 @@ class EducoderGUI:
             self.log(f"清理进程时出错: {e}")
 
     def on_close(self):
-        """关闭窗口时的处理 - 改为最小化到系统托盘"""
-        if self.is_closing:
-            return
-
-        # 如果系统托盘功能不可用，则直接退出
-        if not TRAY_AVAILABLE:
-            self.real_close()
-            return
-
-        # 否则最小化到系统托盘
-        self.minimize_to_tray()
+        """关闭窗口时强制杀死进程"""
+        self.real_close()
 
     def real_close(self):
         """真正的关闭程序"""
@@ -842,11 +1028,6 @@ class EducoderGUI:
 
         self.is_closing = True
         self.log("正在关闭应用...")
-
-        # 停止系统托盘图标
-        if self.tray_icon is not None:
-            self.tray_icon.stop()
-            self.tray_icon = None
 
         # 停止服务器
         if self.server_manager:
@@ -864,16 +1045,10 @@ class EducoderGUI:
 
         # 清理进程
         self.cleanup_processes()
-
         # 关闭窗口
         self.root.destroy()
-
         # 强制退出程序
         os._exit(0)
-
-    def quit_program(self):
-        """从系统托盘菜单退出程序"""
-        self.real_close()
 
     def update_status(self, message):
         """更新状态信息"""
@@ -884,7 +1059,17 @@ class EducoderGUI:
         self.server_status_var.set(message)
 
     def auto_start_server(self):
-        """程序启动时自动启动服务器"""
+        """程序启动时自动启动服务器（仅在会员有效时）"""
+        # 检查会员状态
+        if not self.member_status_checked:
+            self.log("等待会员状态检查完成...")
+            return
+
+        if not self.is_member or self.member_expired:
+            self.log("会员已到期，不自动启动服务器")
+            self.status_var.set("会员已到期，请开通会员后启动服务器")
+            return
+
         self.log("正在自动启动服务器...")
 
         # 延迟500毫秒启动，确保UI完全加载
@@ -893,21 +1078,47 @@ class EducoderGUI:
     def _auto_start_server_task(self):
         """自动启动服务器的实际任务"""
         try:
-            # 模拟点击启动按钮
-            if self.start_server():
-                self.log("服务器自动启动成功")
+            # 再次检查会员状态
+            if self.member_status_checked and self.is_member and not self.member_expired:
+                # 模拟点击启动按钮
+                if self.start_server():
+                    self.log("服务器自动启动成功")
+                else:
+                    self.log("服务器自动启动失败")
             else:
-                self.log("服务器自动启动失败")
-                # 如果自动启动失败，可以询问用户是否重试
-                if messagebox.askretrycancel("启动失败", "服务器自动启动失败，是否重试？"):
-                    self.auto_start_server()
+                self.log("会员状态无效，不启动服务器")
         except Exception as e:
             self.log(f"自动启动服务器时发生错误: {e}")
             messagebox.showerror("启动错误", f"自动启动服务器时发生错误:\n{e}")
 
 
+def main():
+    """程序主入口"""
+    # 检查是否已有实例在运行
+    if check_existing_instance():
+        print("检测到已有Educoder助手正在运行，正在激活窗口...")
+        if activate_existing_instance():
+            print("已成功激活现有窗口")
+            # 显示提示信息
+            root = tk.Tk()
+            root.withdraw()  # 隐藏主窗口
+            messagebox.showinfo("提示", "Educoder助手已在运行，请打开现有程序")
+            root.destroy()
+            sys.exit(0)
+        else:
+            print("无法激活现有窗口，请手动关闭已运行的实例")
+            # 显示错误信息
+            root = tk.Tk()
+            root.withdraw()  # 隐藏主窗口
+            messagebox.showerror("错误", "Educoder助手已在运行且无法激活，请关闭已运行的程序后再启动")
+            root.destroy()
+            sys.exit(1)
+    else:
+        # 没有现有实例，正常启动
+        root = tk.Tk()
+        app = EducoderGUI(root, "测试用户", "测试token")
+        root.mainloop()
+
+
 if __name__ == "__main__":
-    # 测试代码
-    root = tk.Tk()
-    app = EducoderGUI(root, "测试用户", "测试token")
-    root.mainloop()
+    main()

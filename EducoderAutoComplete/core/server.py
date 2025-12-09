@@ -1,5 +1,6 @@
 ﻿import asyncio
 import threading
+
 import websockets
 
 from core.assistant import EducoderAssistant
@@ -62,8 +63,8 @@ class ServerManager:
             self.gui.log("服务器已停止")
             
         except Exception as e:
-            self.gui.root.after(0, lambda: self.gui.log(f"服务器启动失败: {str(e)}"))
-            self.gui.root.after(0, lambda: self.gui.update_server_status("服务器状态: 启动失败"))
-            self.gui.root.after(0, lambda: self.gui.update_status("服务器启动失败"))
+            self.gui.root.after(0, lambda: self.gui.log(f"服务器启动失败: {str(e)}，请检查是否已有Educoder助手正在运行"))
+            self.gui.root.after(0, lambda: self.gui.update_server_status("服务器状态: 启动失败，请检查是否已有Educoder助手正在运行"))
+            self.gui.root.after(0, lambda: self.gui.update_status("服务器启动失败，请检查是否已有Educoder助手正在运行"))
             self.gui.root.after(0, lambda: self.gui.start_button.config(state="normal"))
             self.gui.root.after(0, lambda: self.gui.stop_button.config(state="disabled"))

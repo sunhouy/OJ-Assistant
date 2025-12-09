@@ -1,8 +1,9 @@
 ﻿import time
-import pyperclip
+from tkinter import messagebox
+
 import keyboard
 import pyautogui
-from tkinter import messagebox
+import pyperclip
 
 
 class InputSimulator:
@@ -63,8 +64,6 @@ class InputSimulator:
             # 移除ESC键监听
             keyboard.unhook_all()
 
-            # 显示完成消息
-            self.gui.root.after(0, lambda: messagebox.showinfo("提示", "代码输入已完成"))
             return True
 
         except Exception as e:
