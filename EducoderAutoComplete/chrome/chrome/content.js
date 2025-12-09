@@ -18,10 +18,10 @@ class EducoderFloatingAssistant {
         // 进度同步相关
         this.virtualProgressInterval = null;
         this.virtualProgress = 0;
-        this.progressDuration = 10000; // 10秒完成
+        this.progressDuration = 60000; // 60秒完成
         this.lastProgressUpdateTime = 0;
         this.serverProgress = 0; // 服务器端的进度
-        this.isServerProgressActive = true; // 是否使用服务器进度
+        this.isServerProgressActive = false; // 是否使用服务器进度
         this.progressUpdateInterval = null; // 进度更新轮询
 
         this.init();
@@ -872,430 +872,268 @@ class EducoderFloatingAssistant {
         };
     }
 
+    // 智能纠错函数 - 修改1: 等待全部代码输入完成再让按钮可以点击
+    async smartFix() {
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+            this.showMessage('请先建立服务器连接', 'error');
+            return;
+        }
 
+        if (this.isInputInProgress) {
+            this.showMessage('正在输入中，请稍候...', 'warning');
+            return;
+        }
 
-    // 修改：修复重复读取同一个测试集的bug
-    // 修改 extractTestResults 函数的返回部分
-extractTestResults() {
-    console.log('开始提取测试结果...');
+        try {
+            // 更新按钮状态 - 立即禁用按钮，等待代码输入完成才恢复
+            this.isSmartFixInProgress = true;
+            this.isInputInProgress = true;
+            this.smartFixBtn.disabled = true;
+            this.smartFixBtn.textContent = '纠错中...';
 
-    // 首先尝试查找测试结果容器
-    const testResultContainers = [
-        '.test-set-container___JHp4n',
-        '.result___gu5zt',
-        '.test-case-list',
-        '.ant-table-tbody',
-        '.judge-result',
-        '.test-result'
-    ];
+            this.showMessage('正在获取测试结果...', 'system');
 
-    let resultContainer = null;
-    for (const selector of testResultContainers) {
-        const container = document.querySelector(selector);
-        if (container) {
-            resultContainer = container;
-            console.log('找到结果容器:', selector);
-            break;
+            // 立即显示顶部提示条，从0%开始
+            this.showTopTipOverlay(0, '正在分析测试结果并纠错...');
+
+            const testResults = this.extractTestResults();
+
+            if (!testResults || !testResults.text) {
+                this.showMessage('未找到测试结果，请先运行测试', 'warning');
+                this.resetInputButtons();
+                this.resetSmartFixButton();
+                this.hideTopTipOverlay();
+                return;
+            }
+
+            // 显示测试结果
+            this.testResultTextarea.value = testResults.text;
+            const charCount = testResults.text.length;
+            const lineCount = testResults.text.split('\n').length;
+            this.testResultCount.textContent = `${charCount} 字符, ${lineCount} 行`;
+
+            const elements = testResults.elements || [];
+            this.showMessage(`找到${elements.length}个测试元素，正在分析测试结果并进行纠错...`, 'system');
+
+            // 发送测试结果到服务器
+            const testData = {
+                type: 'test_results',
+                timestamp: new Date().toISOString(),
+                url: window.location.href,
+                results: testResults,
+                currentCode: this.generatedCode,
+                // 始终设置 has_error 为 true，确保服务器进行纠错
+                has_error: true,
+                // 添加测试集元素的详细信息
+                testElementsInfo: {
+                    count: elements.length,
+                    types: elements.map(e => e.tagName || ''),
+                    classes: elements.map(e => e.className || ''),
+                    hasTestSetElements: testResults.rawHtml && (testResults.rawHtml.includes('test-case-item') ||
+                                        testResults.text.includes('测试集'))
+                },
+                // 添加结构化测试数据
+                structured_test_data: testResults.structured || null
+            };
+
+            this.socket.send(JSON.stringify(testData, null, 2));
+            this.showMessage('测试结果已发送到服务器，正在进行纠错...', 'sent');
+
+        } catch (error) {
+            this.showMessage(`智能纠错失败: ${error.message}`, 'error');
+            console.error('智能纠错错误:', error);
+
+            // 恢复按钮状态
+            this.resetInputButtons();
+            this.resetSmartFixButton();
+            this.hideTopTipOverlay();
         }
     }
 
-    // 如果没找到容器，尝试查找包含"测试集"字样的元素
-    if (!resultContainer) {
-        const allElements = document.querySelectorAll('*');
-        for (const el of allElements) {
-            if (el.textContent && el.textContent.includes('测试集')) {
-                resultContainer = el;
-                console.log('通过文本找到结果容器');
-                break;
+    // 修复的extractTestResults函数，正确区分测试输入和预期输出/实际输出
+    extractTestResults() {
+        console.log('开始提取测试结果...');
+
+        // 查找测试结果容器
+        const resultContainer = document.querySelector('.test-set-container___JHp4n');
+        if (!resultContainer) {
+            console.log('未找到测试结果容器');
+            return null;
+        }
+
+        console.log('找到测试结果容器');
+
+        // 提取错误信息
+        let errorInfo = '';
+        let testResultInfo = '';
+        const testResultElement = resultContainer.querySelector('.test-result');
+        if (testResultElement) {
+            const countElement = testResultElement.querySelector('.count');
+            if (countElement) {
+                testResultInfo = countElement.textContent || '';
+            }
+
+            // 提取详细的错误信息
+            const errorDiv = testResultElement.querySelector('div');
+            if (errorDiv) {
+                errorInfo = errorDiv.textContent || '';
             }
         }
-    }
 
-    // 提取失败信息（如 0/1 和具体的错误信息）
-    let failureInfo = '';
-    let errorDetails = '';
-    let testSets = [];
+        // 提取测试集信息
+        const testSets = [];
+        const testSetElements = resultContainer.querySelectorAll('.test-case-item___E3CU9');
+        console.log(`找到 ${testSetElements.length} 个测试集`);
 
-    // 查找失败信息和错误详情
-    const testResultElements = document.querySelectorAll('p.test-result, .test-result, .result-item, [class*="fail"], [class*="error"]');
-    for (const el of testResultElements) {
-        const text = el.textContent || '';
-        const html = el.innerHTML || '';
-
-        // 查找包含 0/1 或 1/1 等格式的文本
-        if (/\d+\/\d+/.test(text)) {
-            failureInfo = text.replace(/\s+/g, ' ').trim();
-            console.log('找到失败信息:', failureInfo);
-
-            // 提取错误详情
-            const errorMatch = html.match(/<div>([\s\S]*?)<\/div>/);
-            if (errorMatch && errorMatch[1]) {
-                errorDetails = errorMatch[1].replace(/<br\s*\/?>/g, '\n').trim();
-            }
-            break;
-        }
-    }
-
-    // 如果没有找到失败信息，尝试查找包含错误信息的元素
-    if (!failureInfo) {
-        const errorElements = document.querySelectorAll('pre, code, .error-message, .compile-error');
-        for (const el of errorElements) {
-            const text = el.textContent || '';
-            if (text.includes('error:') || text.includes('Error:')) {
-                errorDetails = text.trim();
-                // 尝试从父元素中找 0/1 格式
-                const parentText = el.parentElement?.textContent || '';
-                const match = parentText.match(/\d+\/\d+/);
-                if (match) {
-                    failureInfo = match[0];
-                }
-                break;
-            }
-        }
-    }
-
-    // 提取测试集信息 - 使用Set来去重
-    const testSetNames = new Set();
-    const testCaseItems = document.querySelectorAll('li.test-case-item, .test-case-item, .case-item, [class*="test-case"]');
-    console.log('找到测试集元素数量:', testCaseItems.length);
-
-    // 构建元素信息数组 - 修复：确保总是有 elements 数组
-    const elementsArray = Array.from(testCaseItems).map(item => ({
-        tagName: item.tagName,
-        className: item.className || ''
-    }));
-
-    if (testCaseItems.length > 0) {
-        testCaseItems.forEach((item, index) => {
+        testSetElements.forEach((testSetElement, index) => {
             try {
                 // 提取测试集名称
                 let testSetName = '';
-                const nameElement = item.querySelector('.test-title___mf3Df, .case-title, .test-name, h2, h3');
-                if (nameElement) {
-                    const nameText = nameElement.textContent || '';
-                    const nameMatch = nameText.match(/测试集\s*\d+/);
-                    if (nameMatch) {
-                        testSetName = nameMatch[0];
-                    } else if (nameText.trim()) {
-                        testSetName = nameText.trim();
-                    }
+                const testTitleElement = testSetElement.querySelector('.test-title___mf3Df');
+                if (testTitleElement) {
+                    testSetName = testTitleElement.textContent || '';
                 }
-
-                // 如果没有找到名称，使用默认名称
                 if (!testSetName) {
                     testSetName = `测试集${index + 1}`;
                 }
 
-                // 检查是否已经处理过这个测试集 - 修复重复读取的bug
-                if (testSetNames.has(testSetName)) {
-                    console.log(`跳过重复的测试集: ${testSetName}`);
-                    return; // 跳过已经处理过的测试集
+                // 提取测试输入
+                let testInput = '';
+                // 查找包含"测试输入："的ant-row
+                const testInputRow = testSetElement.querySelector('.ant-row.css-u1a3wc');
+                if (testInputRow && testInputRow.textContent.includes('测试输入：')) {
+                    // 查找测试输入容器
+                    const testInputContainer = testInputRow.querySelector('.c-white.diff-panel-container___IpXsK');
+                    if (testInputContainer) {
+                        const insElement = testInputContainer.querySelector('ins');
+                        if (insElement) {
+                            testInput = insElement.textContent || '';
+                        } else {
+                            testInput = testInputContainer.textContent || '';
+                        }
+                    }
                 }
-
-                testSetNames.add(testSetName);
 
                 // 提取预期输出和实际输出
                 let expectedOutput = '';
                 let actualOutput = '';
 
-                // 方法1: 查找包含"预期输出"和"实际输出"的文本区域
-                const itemText = item.textContent || '';
-                if (itemText.includes('—— 预期输出 ——') && itemText.includes('—— 实际输出 ——')) {
-                    const parts = itemText.split('—— 预期输出 ——');
-                    if (parts.length > 1) {
-                        const expectedPart = parts[1].split('—— 实际输出 ——')[0] || '';
-                        expectedOutput = expectedPart.trim();
-
-                        if (parts[1].includes('—— 实际输出 ——')) {
-                            const actualPart = parts[1].split('—— 实际输出 ——')[1] || '';
-                            actualOutput = actualPart.split('展示原始输出')[0].trim();
+                // 查找包含"—— 预期输出 ——"的output-title-container后面的diff-panel-container
+                const outputTitleContainer = testSetElement.querySelector('.output-title-container___P2NjC');
+                if (outputTitleContainer) {
+                    // 找到紧跟着的diff-panel-container
+                    const nextDiffPanel = outputTitleContainer.nextElementSibling;
+                    if (nextDiffPanel && nextDiffPanel.classList.contains('diff-panel-container___IpXsK')) {
+                        // 第一个div包含预期输出（ins标签）
+                        const firstDiv = nextDiffPanel.querySelector('div:first-child');
+                        if (firstDiv) {
+                            const insElement = firstDiv.querySelector('ins');
+                            if (insElement) {
+                                expectedOutput = insElement.textContent || '';
+                            } else {
+                                expectedOutput = firstDiv.textContent || '';
+                            }
                         }
-                    }
-                }
 
-                // 方法2: 查找diff面板
-                if (!expectedOutput || !actualOutput) {
-                    const diffPanel = item.querySelector('.diff-panel-container___IpXsK, .diff-panel, .output-diff');
-                    if (diffPanel) {
-                        // 查找ins标签（通常表示预期/正确的输出）
-                        const insElements = diffPanel.querySelectorAll('ins, .expected-output, [class*="expected"]');
-                        expectedOutput = Array.from(insElements).map(el => el.textContent || '').join('\n').trim();
-
-                        // 查找del标签（通常表示实际/错误的输出）
-                        const delElements = diffPanel.querySelectorAll('del, .actual-output, [class*="actual"]');
-                        actualOutput = Array.from(delElements).map(el => el.textContent || '').join('\n').trim();
-
-                        // 如果还是没找到，尝试查找两个div
-                        if (!expectedOutput || !actualOutput) {
-                            const divs = diffPanel.querySelectorAll('div');
-                            if (divs.length >= 2) {
-                                expectedOutput = (divs[0].textContent || '').trim();
-                                actualOutput = (divs[1].textContent || '').trim();
+                        // 第二个div包含实际输出（del标签）
+                        const secondDiv = nextDiffPanel.querySelector('div:nth-child(2)');
+                        if (secondDiv) {
+                            const delElement = secondDiv.querySelector('del');
+                            if (delElement) {
+                                actualOutput = delElement.textContent || '';
+                            } else {
+                                actualOutput = secondDiv.textContent || '';
                             }
                         }
                     }
                 }
 
-                // 方法3: 查找具体的输出元素
-                if (!expectedOutput || !actualOutput) {
-                    const outputElements = item.querySelectorAll('.output-content, .test-output, pre, code');
-                    for (const el of outputElements) {
-                        const text = el.textContent || '';
-                        const parentText = el.parentElement?.textContent || '';
-
-                        if (parentText.includes('预期输出') || text.includes('预期')) {
-                            expectedOutput = text.trim();
-                        } else if (parentText.includes('实际输出') || text.includes('实际')) {
-                            actualOutput = text.trim();
-                        }
-                    }
-                }
-
-                // 如果还是没找到，尝试更通用的方法
-                if (!expectedOutput && !actualOutput) {
-                    // 查找所有文本节点，尝试解析
-                    const allText = itemText;
-                    const lines = allText.split('\n');
-                    let inExpected = false;
-                    let inActual = false;
-                    let currentOutput = '';
-
-                    for (const line of lines) {
-                        const trimmedLine = line.trim();
-
-                        if (trimmedLine.includes('预期输出') || trimmedLine.includes('—— 预期输出 ——')) {
-                            if (currentOutput && inActual) {
-                                actualOutput = currentOutput.trim();
-                                currentOutput = '';
-                            }
-                            inExpected = true;
-                            inActual = false;
-                        } else if (trimmedLine.includes('实际输出') || trimmedLine.includes('—— 实际输出 ——')) {
-                            if (currentOutput && inExpected) {
-                                expectedOutput = currentOutput.trim();
-                                currentOutput = '';
-                            }
-                            inExpected = false;
-                            inActual = true;
-                        } else if (inExpected || inActual) {
-                            if (trimmedLine && !trimmedLine.includes('展示原始输出')) {
-                                currentOutput += trimmedLine + '\n';
-                            }
-                        }
-                    }
-
-                    // 处理最后一个输出
-                    if (currentOutput) {
-                        if (inExpected) {
-                            expectedOutput = currentOutput.trim();
-                        } else if (inActual) {
-                            actualOutput = currentOutput.trim();
-                        }
-                    }
-                }
-
-                // 如果预期输出和实际输出都为空，检查是否有编译错误信息
-                if (!expectedOutput && !actualOutput) {
-                    if (itemText.includes('编译失败') || itemText.includes('error:')) {
-                        actualOutput = '编译失败，请查看错误信息';
-                        expectedOutput = '期望程序能够编译成功并输出正确结果';
-                    }
-                }
+                // 清理输出内容
+                testInput = testInput.trim();
+                expectedOutput = expectedOutput.trim();
+                actualOutput = actualOutput.trim();
 
                 testSets.push({
                     name: testSetName,
+                    test_input: testInput || '未找到测试输入',
                     expected: expectedOutput || '未找到预期输出',
                     actual: actualOutput || '未找到实际输出'
                 });
 
                 console.log(`提取测试集 ${testSetName}:`);
-                console.log('预期输出:', expectedOutput ? expectedOutput.substring(0, 100) : '空');
-                console.log('实际输出:', actualOutput ? actualOutput.substring(0, 100) : '空');
+                console.log('测试输入:', testInput.substring(0, 100) + (testInput.length > 100 ? '...' : ''));
+                console.log('预期输出:', expectedOutput.substring(0, 100) + (expectedOutput.length > 100 ? '...' : ''));
+                console.log('实际输出:', actualOutput.substring(0, 100) + (actualOutput.length > 100 ? '...' : ''));
 
             } catch (error) {
                 console.error('提取测试集时出错:', error);
             }
         });
-    }
 
-    // 如果没有通过常规方法找到测试集，尝试直接从页面文本中提取
-    if (testSets.length === 0) {
-        console.log('尝试从页面文本中提取测试集...');
-        const bodyText = document.body.textContent || '';
+        // 构建完整的测试结果文本
+        let fullText = '';
 
-        // 查找所有测试集模式
-        const testSetRegex = /测试集\s*\d+[\s\S]*?(?=测试集\s*\d+|$)/g;
-        const testSetMatches = bodyText.match(testSetRegex);
+        // 添加测试结果信息
+        if (testResultInfo) {
+            fullText += `测试结果: ${testResultInfo}\n\n`;
+        }
 
-        if (testSetMatches) {
-            testSetMatches.forEach((match, index) => {
-                // 提取测试集名称
-                const nameMatch = match.match(/测试集\s*\d+/);
-                const testSetName = nameMatch ? nameMatch[0] : `测试集${index + 1}`;
+        // 添加错误信息
+        if (errorInfo) {
+            fullText += `错误详情:\n${errorInfo}\n\n`;
+        }
 
-                // 跳过重复的测试集
-                if (testSetNames.has(testSetName)) {
-                    return;
-                }
-                testSetNames.add(testSetName);
+        // 添加测试集信息
+        if (testSets.length > 0) {
+            fullText += `测试集数量: ${testSets.length}\n\n`;
 
-                // 提取预期输出和实际输出
-                let expectedOutput = '';
-                let actualOutput = '';
+            testSets.forEach((testSet, index) => {
+                fullText += `==== ${testSet.name} ====\n`;
 
-                if (match.includes('—— 预期输出 ——') && match.includes('—— 实际输出 ——')) {
-                    const parts = match.split('—— 预期输出 ——');
-                    if (parts.length > 1) {
-                        const expectedPart = parts[1].split('—— 实际输出 ——')[0] || '';
-                        expectedOutput = expectedPart.trim();
-
-                        if (parts[1].includes('—— 实际输出 ——')) {
-                            const actualPart = parts[1].split('—— 实际输出 ——')[1] || '';
-                            actualOutput = actualPart.trim();
-                        }
-                    }
+                if (testSet.test_input && testSet.test_input !== '未找到测试输入') {
+                    fullText += `测试输入:\n${testSet.test_input}\n\n`;
                 }
 
-                testSets.push({
-                    name: testSetName,
-                    expected: expectedOutput || '未找到预期输出',
-                    actual: actualOutput || '未找到实际输出'
-                });
+                fullText += `预期输出:\n${testSet.expected}\n\n`;
+                fullText += `实际输出:\n${testSet.actual}\n\n`;
+                fullText += '='.repeat(50) + '\n\n';
             });
-        }
-    }
-
-    // 构建完整的测试结果文本
-    let fullText = '';
-
-    // 添加失败信息
-    if (failureInfo) {
-        fullText += `测试结果: ${failureInfo}\n\n`;
-    }
-
-    if (errorDetails) {
-        fullText += `错误详情:\n${errorDetails}\n\n`;
-    }
-
-    // 添加测试集信息
-    if (testSets.length > 0) {
-        fullText += `测试集数量: ${testSets.length}\n\n`;
-
-        testSets.forEach((testSet, index) => {
-            fullText += `${testSet.name}\n`;
-            fullText += `—— 预期输出 ——\n${testSet.expected}\n\n`;
-            fullText += `—— 实际输出 ——\n${testSet.actual}\n\n`;
-            fullText += '='.repeat(50) + '\n\n';
-        });
-    } else {
-        fullText += '未找到测试集信息\n';
-    }
-
-    // 如果文本太长，截断
-    if (fullText.length > 10000) {
-        fullText = fullText.substring(0, 10000) + '\n\n[测试结果过长，已截断]';
-    }
-
-    // 返回结果 - 修复：确保总是返回 elements 数组
-    const result = {
-        text: fullText,
-        rawHtml: resultContainer ? resultContainer.outerHTML.substring(0, 15000) : '',
-        // 修复：确保 elements 总是数组，即使为空
-        elements: elementsArray.length > 0 ? elementsArray : [], // 使用构建好的 elementsArray
-        timestamp: new Date().toISOString(),
-        url: window.location.href,
-        source: 'test_elements',
-        // 新增结构化数据
-        structured: {
-            failure_info: failureInfo,
-            error_details: errorDetails,
-            test_sets: testSets,
-            total_test_sets: testSets.length
-        }
-    };
-
-    console.log('提取的测试结果:', result);
-    return result;
-}
-    // 修改 smartFix 函数中访问 testResults.elements 的部分
-async smartFix() {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-        this.showMessage('请先建立服务器连接', 'error');
-        return;
-    }
-
-    if (this.isInputInProgress) {
-        this.showMessage('正在输入中，请稍候...', 'warning');
-        return;
-    }
-
-    try {
-        // 更新按钮状态 - 立即禁用按钮，等待代码输入完成才恢复
-        this.isSmartFixInProgress = true;
-        this.isInputInProgress = true;
-        this.smartFixBtn.disabled = true;
-        this.smartFixBtn.textContent = '纠错中...';
-
-        this.showMessage('正在获取测试结果...', 'system');
-
-        // 立即显示顶部提示条，从0%开始
-        this.showTopTipOverlay(0, '正在分析测试结果并纠错...');
-
-        const testResults = this.extractTestResults();
-
-        if (!testResults || !testResults.text) {
-            this.showMessage('未找到测试结果，请先运行测试', 'warning');
-            this.resetInputButtons();
-            this.resetSmartFixButton();
-            this.hideTopTipOverlay();
-            return;
+        } else {
+            fullText += '未找到测试集信息\n';
         }
 
-        // 显示测试结果
-        this.testResultTextarea.value = testResults.text;
-        const charCount = testResults.text.length;
-        const lineCount = testResults.text.split('\n').length;
-        this.testResultCount.textContent = `${charCount} 字符, ${lineCount} 行`;
+        // 如果文本太长，截断
+        if (fullText.length > 10000) {
+            fullText = fullText.substring(0, 10000) + '\n\n[测试结果过长，已截断]';
+        }
 
-        // 修复：使用 safe access 来避免 undefined 错误
-        const elementsCount = testResults.elements ? testResults.elements.length : 0;
-        this.showMessage(`找到${elementsCount}个测试元素，正在分析测试结果并进行纠错...`, 'system');
+        // 构建元素信息数组
+        const elementsArray = Array.from(testSetElements).map((el, index) => ({
+            tagName: el.tagName,
+            className: el.className || '',
+            index: index
+        }));
 
-        // 发送测试结果到服务器
-        const testData = {
-            type: 'test_results',
+        // 返回结果
+        const result = {
+            text: fullText,
+            rawHtml: resultContainer.outerHTML.substring(0, 15000) || '',
+            elements: elementsArray,
             timestamp: new Date().toISOString(),
             url: window.location.href,
-            results: testResults,
-            currentCode: this.generatedCode,
-            // 始终设置 has_error 为 true，确保服务器进行纠错
-            has_error: true,
-            // 修复：使用安全访问
-            testElementsInfo: {
-                count: elementsCount,
-                // 修复：确保 testResults.elements 存在
-                types: testResults.elements ? testResults.elements.map(e => e.tagName) : [],
-                classes: testResults.elements ? testResults.elements.map(e => e.className) : [],
-                hasTestSetElements: testResults.rawHtml.includes('test-case-item') ||
-                                    testResults.text.includes('测试集')
-            },
-            // 添加结构化测试数据
-            structured_test_data: testResults.structured || null
+            source: 'test_elements',
+            // 结构化数据
+            structured: {
+                test_result_info: testResultInfo,
+                error_info: errorInfo,
+                test_sets: testSets,
+                total_test_sets: testSets.length
+            }
         };
 
-        this.socket.send(JSON.stringify(testData, null, 2));
-        this.showMessage('测试结果已发送到服务器，正在进行纠错...', 'sent');
-
-    } catch (error) {
-        this.showMessage(`智能纠错失败: ${error.message}`, 'error');
-        console.error('智能纠错错误:', error);
-
-        // 恢复按钮状态
-        this.resetInputButtons();
-        this.resetSmartFixButton();
-        this.hideTopTipOverlay();
+        console.log('提取的测试结果:', result);
+        return result;
     }
-}
 
     startAutoInput() {
         if (!this.generatedCode) {
@@ -1435,7 +1273,7 @@ async smartFix() {
     }
 
     minimize() {
-        this.container.style.resize = 'none'
+        this.container.style.resize = 'none';
         this.container.classList.add('ea-minimized-state');
         this.isMinimized = true;
         this.minimizeBtn.setAttribute('title', '恢复');
@@ -1445,12 +1283,14 @@ async smartFix() {
     }
 
     restore() {
-        this.container.style.resize = 'both'
+        this.container.style.resize = 'both';
         this.container.classList.remove('ea-minimized-state');
         this.isMinimized = false;
         this.minimizeBtn.setAttribute('title', '最小化');
         this.minimizeBtn.textContent = '-';
-        this.container.style.height = this.currentStyle[1];
+        if (this.currentStyle && this.currentStyle[1]) {
+            this.container.style.height = this.currentStyle[1];
+        }
     }
 
     escapeHtml(text) {

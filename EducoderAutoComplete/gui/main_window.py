@@ -9,8 +9,6 @@ import sys
 import threading
 import time
 import tkinter as tk
-import urllib.error
-import urllib.request
 import webbrowser
 from tkinter import ttk, scrolledtext, messagebox
 
@@ -20,6 +18,7 @@ import websockets
 
 from core.server import ServerManager
 from gui.input_test import TestInputDialog
+from gui.update_window import UpdateWindow
 from utils.config import ConfigManager
 
 # 导入 extension_setup 模块
@@ -83,14 +82,18 @@ async def send_activate_signal():
 
 
 class EducoderGUI:
-    CURRENT_VERSION = "0.1"  # 当前应用版本号
+    CURRENT_VERSION = "0.1"  # 默认版本号
 
-    def __init__(self, root, username, token, machine_code=None, parent_window=None):
+    def __init__(self, root, username, token, machine_code=None, parent_window=None, current_version=None):
         self.root = root
         self.username = username
         self.token = token
         self.machine_code = machine_code  # 保存机器码
         self.parent_window = parent_window  # 保存父窗口引用
+
+        # 如果传入了版本号，则使用传入的版本号
+        if current_version:
+            self.CURRENT_VERSION = current_version
 
         # 初始化变量
         self.server_manager = None
@@ -121,7 +124,7 @@ class EducoderGUI:
 
         # 设置窗口属性
         self.root.title("Educoder助手")
-        self.root.geometry("850x500")  # 增加高度以适应会员状态区域
+        self.root.geometry("850x520")  # 增加高度以适应超链接区域
         self.root.resizable(True, True)
 
         # 设置关闭窗口的处理
@@ -284,6 +287,43 @@ class EducoderGUI:
 
         # 默认隐藏日志区域
         self.log_frame.grid_remove()
+
+        # 添加超链接区域
+        links_frame = ttk.Frame(main_frame)
+        links_frame.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(10, 0))
+
+        # 帮助中心超链接
+        help_link = tk.Label(
+            links_frame,
+            text="帮助中心",
+            fg="blue",
+            cursor="hand2",
+            font=("TkDefaultFont", 9)
+        )
+        help_link.pack(side=tk.LEFT, padx=(0, 20))
+        help_link.bind("<Button-1>", lambda e: webbrowser.open("https://yhsun.cn/educoder/help"))
+
+        # 用户协议与隐私政策超链接
+        terms_link = tk.Label(
+            links_frame,
+            text="用户协议与隐私政策",
+            fg="blue",
+            cursor="hand2",
+            font=("TkDefaultFont", 9)
+        )
+        terms_link.pack(side=tk.LEFT, padx=(0, 20))
+        terms_link.bind("<Button-1>", lambda e: webbrowser.open("https://yhsun.cn/educoder/terms/"))
+
+        # 开放源代码许可超链接
+        license_link = tk.Label(
+            links_frame,
+            text="开放源代码许可",
+            fg="blue",
+            cursor="hand2",
+            font=("TkDefaultFont", 9)
+        )
+        license_link.pack(side=tk.LEFT)
+        license_link.bind("<Button-1>", lambda e: webbrowser.open("https://yhsun.cn/educoder/license"))
 
         # 启动日志处理
         self.process_log_queue()
@@ -659,243 +699,151 @@ class EducoderGUI:
         self.log_text.config(state='disabled')
 
     def check_update(self):
-        """检测更新"""
+        """检测更新 - 使用更新界面的逻辑"""
+        self.log("[INFO] 开始检测更新")
         self.status_var.set("正在检测更新...")
-        # 在新线程中执行网络请求，避免界面卡顿
-        threading.Thread(target=self._check_update_thread, daemon=True).start()
 
-    def _check_update_thread(self):
-        """检测更新的线程函数"""
+        # 在新线程中执行版本检查
+        threading.Thread(target=self._perform_version_check, daemon=True).start()
+
+    def _perform_version_check(self):
+        """执行版本检查"""
         try:
-            # 获取最新版本号
-            version_url = "http://www.yhsun.cn/educoder/version.txt"
-
-            # 设置请求头，模拟浏览器请求
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'text/plain',
-                'Connection': 'close'
+            url = f"{self.BASE_URL}?action=check_update"
+            data = {
+                "current_version": self.CURRENT_VERSION
             }
 
-            req = urllib.request.Request(version_url, headers=headers)
+            self.log(f"[INFO] 发送版本检查请求: {url}")
+            self.log(f"[INFO] 当前版本: {self.CURRENT_VERSION}")
 
-            # 设置超时和重试机制
-            for attempt in range(2):
-                try:
-                    with urllib.request.urlopen(req, timeout=10) as response:
-                        latest_version = response.read().decode('utf-8').strip()
-                    break  # 成功则跳出重试循环
-                except socket.timeout:
-                    if attempt == 1:  # 最后一次尝试也失败
-                        raise
-                    time.sleep(1)  # 等待1秒后重试
-                except urllib.error.HTTPError as e:
-                    if e.code == 503 and attempt < 1:  # 服务暂时不可用，重试一次
-                        time.sleep(2)
-                        continue
-                    else:
-                        raise
-                except ConnectionResetError:
-                    if attempt == 1:  # 最后一次尝试也失败
-                        raise
-                    time.sleep(1)  # 等待1秒后重试
+            response = requests.post(url, json=data, timeout=10)
+            result = response.json()
 
-            if not latest_version:
-                raise ValueError("从服务器获取的版本号为空")
+            self.log(f"[INFO] 版本检查响应: {result}")
 
-            # 比较版本号
-            if self._compare_version(latest_version, self.CURRENT_VERSION) > 0:
-                # 有新版本，获取更新内容和下载地址
-                content_url = "http://www.yhsun.cn/educoder/content.txt"
-                download_url = "http://www.yhsun.cn/educoder/download.txt"
+            self.root.after(0, lambda: self._handle_update_result(result))
 
-                # 获取更新内容
-                req = urllib.request.Request(content_url, headers=headers)
-                with urllib.request.urlopen(req, timeout=10) as response:
-                    update_content = response.read().decode('utf-8').strip()
-
-                # 获取下载地址
-                req = urllib.request.Request(download_url, headers=headers)
-                with urllib.request.urlopen(req, timeout=10) as response:
-                    download_link = response.read().decode('utf-8').strip()
-
-                # 在GUI线程中显示更新信息
-                self.root.after(0, lambda: self._show_update_info(
-                    latest_version, update_content, download_link
-                ))
-            else:
-                # 已经是最新版本
-                self.root.after(0, lambda: messagebox.showinfo(
-                    "检测更新",
-                    f"当前版本 {self.CURRENT_VERSION} 已经是最新版本！"
-                ))
-                self.root.after(0, lambda: self.status_var.set("已经是最新版本"))
-
-        except urllib.error.URLError as e:
-            error_msg = str(e.reason) if hasattr(e, 'reason') else str(e)
-            self.root.after(0, lambda: messagebox.showwarning(
-                "检测更新失败",
-                f"无法连接到更新服务器，请检查网络连接。\n错误代码: {getattr(e, 'code', 'N/A')}\n错误详情: {error_msg}"
-            ))
-            self.root.after(0, lambda: self.status_var.set("检测更新失败"))
-        except socket.timeout:
-            self.root.after(0, lambda: messagebox.showwarning(
-                "检测更新失败",
-                "连接服务器超时，请稍后重试。"
-            ))
-            self.root.after(0, lambda: self.status_var.set("检测更新失败"))
-        except ConnectionResetError:
-            self.root.after(0, lambda: messagebox.showwarning(
-                "检测更新失败",
-                "连接被服务器重置，请稍后重试。"
-            ))
-            self.root.after(0, lambda: self.status_var.set("检测更新失败"))
+        except requests.exceptions.Timeout:
+            self.log("[ERROR] 检查更新超时")
+            self.root.after(0, lambda: self._handle_update_error("检查更新超时，请检查网络连接"))
+        except requests.exceptions.ConnectionError:
+            self.log("[ERROR] 检查更新连接错误")
+            self.root.after(0, lambda: self._handle_update_error("网络连接错误，请检查网络连接"))
         except Exception as e:
+            self.log(f"[ERROR] 检查更新异常: {str(e)}")
+            self.root.after(0, lambda: self._handle_update_error(f"检查更新失败: {str(e)}"))
+
+    def _handle_update_result(self, result):
+        """处理更新检查结果"""
+        try:
+            if result.get('code') == 200:
+                data = result.get('data', {})
+
+                # 检查是否需要强制更新
+                if data.get('need_update', 0) == 1 and data.get('force_update', 0) == 1:
+                    # 需要强制更新，显示更新窗口
+                    self.log("[INFO] 需要强制更新")
+                    self.show_update_window(data)
+                    return
+                elif data.get('need_update', 0) == 1:
+                    # 需要普通更新，询问用户是否更新
+                    self.log("[INFO] 需要普通更新")
+                    self.ask_for_optional_update(data)
+                else:
+                    # 不需要更新
+                    self.log("[INFO] 当前已是最新版本")
+                    self.root.after(0, lambda: messagebox.showinfo(
+                        "检测更新",
+                        f"当前版本 {self.CURRENT_VERSION} 已经是最新版本！"
+                    ))
+                    self.status_var.set("已经是最新版本")
+            else:
+                # API返回错误
+                error_msg = result.get('message', '未知错误')
+                self.log(f"[ERROR] 更新检查API返回错误: {error_msg}")
+                self.root.after(0, lambda: messagebox.showwarning(
+                    "检测更新失败",
+                    f"检查更新失败: {error_msg}"
+                ))
+                self.status_var.set("检测更新失败")
+
+        except Exception as e:
+            self.log(f"[ERROR] 处理更新结果时出错: {str(e)}")
             self.root.after(0, lambda: messagebox.showerror(
                 "检测更新失败",
-                f"检测更新时发生错误：{str(e)}"
+                f"处理更新结果时出错: {str(e)}"
             ))
-            self.root.after(0, lambda: self.status_var.set("检测更新失败"))
+            self.status_var.set("检测更新失败")
 
-    def _compare_version(self, version1, version2):
-        """比较版本号大小
+    def _handle_update_error(self, error_msg):
+        """处理更新检查错误"""
+        self.log(f"[ERROR] {error_msg}")
+        self.root.after(0, lambda: messagebox.showwarning(
+            "检测更新失败",
+            error_msg
+        ))
+        self.status_var.set("检测更新失败")
 
-        Args:
-            version1: 版本号1 (如 "1.2.3")
-            version2: 版本号2 (如 "1.2.4")
+    def ask_for_optional_update(self, update_data):
+        """询问用户是否进行普通更新"""
+        response = messagebox.askyesno(
+            "发现新版本",
+            f"发现新版本 {update_data.get('latest_version', '')}\n"
+            f"更新内容：{update_data.get('update_content', '')}\n\n"
+            "是否立即更新？"
+        )
 
-        Returns:
-            >0: version1 > version2
-            =0: version1 = version2
-            <0: version1 < version2
-        """
+        if response:
+            # 用户选择更新，显示更新窗口
+            self.log("[INFO] 用户选择更新")
+            self.show_update_window(update_data)
+        else:
+            # 用户选择不更新
+            self.log("[INFO] 用户选择不更新")
+            self.status_var.set("已取消更新")
 
-        def parse_version(v):
-            parts = []
-            for part in v.split('.'):
-                try:
-                    parts.append(int(part))
-                except ValueError:
-                    # 如果不能转换为整数，则按字符串处理
-                    parts.append(part)
-            return parts
+    def show_update_window(self, update_data):
+        """显示更新窗口"""
+        self.log(f"[INFO] 显示更新窗口，更新数据: {update_data}")
 
-        v1_parts = parse_version(version1)
-        v2_parts = parse_version(version2)
+        # 创建更新窗口
+        update_root = tk.Toplevel(self.root)
+        update_root.title("软件更新")
+        update_root.geometry("500x600")
+        update_root.resizable(True, True)
 
-        # 补齐位数
-        max_len = max(len(v1_parts), len(v2_parts))
-        v1_parts.extend([0] * (max_len - len(v1_parts)))
-        v2_parts.extend([0] * (max_len - len(v2_parts)))
+        # 居中显示
+        update_root.update_idletasks()
+        x = (update_root.winfo_screenwidth() - update_root.winfo_width()) // 2
+        y = (update_root.winfo_screenheight() - update_root.winfo_height()) // 2
+        update_root.geometry(f"+{x}+{y}")
 
-        # 逐级比较
-        for v1, v2 in zip(v1_parts, v2_parts):
-            if isinstance(v1, int) and isinstance(v2, int):
-                if v1 != v2:
-                    return v1 - v2
+        # 创建更新窗口实例
+        update_window = UpdateWindow(
+            update_root,
+            update_data,
+            self.CURRENT_VERSION,
+            lambda: self.on_update_completed()
+        )
+
+        # 设置关闭更新窗口时的行为
+        def on_update_window_close():
+            update_root.destroy()
+            if update_data.get('force_update', 0) == 1:
+                # 如果是强制更新，关闭主窗口
+                self.status_var.set("需要强制更新，请先更新后再使用")
             else:
-                # 如果有一个不是整数，都转为字符串比较
-                if str(v1) != str(v2):
-                    return 1 if str(v1) > str(v2) else -1
+                # 普通更新，恢复正常状态
+                self.status_var.set("更新窗口已关闭")
 
-        return 0
+        update_root.protocol("WM_DELETE_WINDOW", on_update_window_close)
 
-    def _show_update_info(self, latest_version, update_content, download_link):
-        """显示更新信息对话框"""
-        # 检查是否已经有其他对话框在显示
-        for widget in self.root.winfo_children():
-            if isinstance(widget, tk.Toplevel) and widget.winfo_viewable():
-                # 如果有其他对话框，先将其提升到最前面
-                widget.lift()
-                return
-
-        # 创建自定义对话框
-        dialog = tk.Toplevel(self.root)
-        dialog.title(f"发现新版本 {latest_version}")
-        dialog.geometry("600x400")
-        dialog.resizable(True, True)
-        dialog.transient(self.root)
-        dialog.grab_set()
-
-        # 设置窗口居中
-        dialog.update_idletasks()
-        width = dialog.winfo_width()
-        height = dialog.winfo_height()
-        x = (dialog.winfo_screenwidth() // 2) - (width // 2)
-        y = (dialog.winfo_screenheight() // 2) - (height // 2)
-        dialog.geometry(f'{width}x{height}+{x}+{y}')
-
-        # 创建主框架
-        main_frame = ttk.Frame(dialog, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-
-        # 版本信息
-        version_frame = ttk.Frame(main_frame)
-        version_frame.pack(fill=tk.X, pady=(0, 10))
-
-        ttk.Label(version_frame, text=f"发现新版本: {latest_version}",
-                  font=('TkDefaultFont', 12, 'bold')).pack(side=tk.LEFT)
-        ttk.Label(version_frame, text=f"当前版本: {self.CURRENT_VERSION}").pack(side=tk.RIGHT)
-
-        # 更新内容标题
-        ttk.Label(main_frame, text="更新内容:", font=('TkDefaultFont', 10, 'bold')).pack(anchor=tk.W)
-
-        # 更新内容文本框（可滚动）
-        content_text = scrolledtext.ScrolledText(main_frame, wrap=tk.WORD, height=10)
-        content_text.pack(fill=tk.BOTH, expand=True, pady=(5, 10))
-        content_text.insert('1.0', update_content or "暂无更新内容描述")
-        content_text.config(state='disabled')
-
-        # 下载地址
-        download_frame = ttk.Frame(main_frame)
-        download_frame.pack(fill=tk.X, pady=(0, 10))
-
-        ttk.Label(download_frame, text="下载地址:",
-                  font=('TkDefaultFont', 10, 'bold')).pack(side=tk.LEFT, anchor=tk.W)
-
-        # 下载地址文本框（可复制）
-        download_var = tk.StringVar(value=download_link or "暂无下载地址")
-        download_entry = ttk.Entry(download_frame, textvariable=download_var, width=50)
-        download_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
-
-        # 复制按钮
-        def copy_download_link():
-            if download_link:
-                self.root.clipboard_clear()
-                self.root.clipboard_append(download_link)
-                self.root.update()
-                messagebox.showinfo("复制成功", "下载地址已复制到剪贴板")
-            else:
-                messagebox.showwarning("复制失败", "没有可复制的下载地址")
-
-        ttk.Button(download_frame, text="复制", command=copy_download_link, width=8).pack(side=tk.RIGHT)
-
-        # 按钮区域
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.X, pady=(10, 0))
-
-        # 打开下载页面按钮
-        def open_download_page():
-            if download_link and download_link.startswith(('http://', 'https://')):
-                webbrowser.open(download_link)
-            dialog.destroy()
-
-        if download_link and download_link.startswith(('http://', 'https://')):
-            ttk.Button(button_frame, text="打开下载页面", command=open_download_page, width=15).pack(side=tk.LEFT,
-                                                                                                     padx=(0, 10))
-
-        # 稍后提醒按钮
-        ttk.Button(button_frame, text="关闭", command=dialog.destroy, width=10).pack(side=tk.RIGHT)
-
-        # 关闭按钮
-        def on_dialog_close():
-            self.status_var.set(f"有新版本 {latest_version} 可用")
-            dialog.destroy()
-
-        dialog.protocol("WM_DELETE_WINDOW", on_dialog_close)
-
-        # 更新主界面状态
-        self.status_var.set(f"有新版本 {latest_version} 可用")
+    def on_update_completed(self):
+        """更新完成后的回调"""
+        self.log("[INFO] 更新完成")
+        messagebox.showinfo("更新完成", "更新完成，请重启程序以应用更新")
+        self.status_var.set("更新完成，请重启程序")
 
     def start_server(self):
         """启动WebSocket服务器"""
@@ -956,26 +904,6 @@ class EducoderGUI:
         if messagebox.askyesno("确认", "确定要退出登录吗？"):
             self.real_close()
 
-    def _perform_logout(self):
-        """执行登出操作"""
-        try:
-            # 使用asyncio在单独的事件循环中运行异步代码
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-            async def logout():
-                async with websockets.connect("ws://localhost:8000") as websocket:
-                    await websocket.send(json.dumps({
-                        'action': 'logout',
-                        'username': self.username,
-                        'token': self.token
-                    }))
-
-            loop.run_until_complete(logout())
-            loop.close()
-        except:
-            pass  # 忽略登出错误
-
     def cleanup_processes(self):
         """清理所有进程"""
         if hasattr(self, 'is_closing') and self.is_closing:
@@ -1032,9 +960,6 @@ class EducoderGUI:
         # 停止服务器
         if self.server_manager:
             self.server_manager.stop()
-
-        # 发送登出请求（不阻塞主线程）
-        threading.Thread(target=self._perform_logout, daemon=True).start()
 
         # 停止所有定时器
         try:

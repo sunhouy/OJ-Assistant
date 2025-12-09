@@ -1,4 +1,5 @@
-﻿import threading
+﻿import sys
+import threading
 import tkinter as tk
 import webbrowser
 from tkinter import ttk, messagebox
@@ -7,6 +8,7 @@ import requests
 
 from gui.dialogs import FirstRunDialog
 from gui.main_window import EducoderGUI
+from gui.update_window import UpdateWindow
 from utils.config import ConfigManager
 
 
@@ -16,7 +18,7 @@ class LoginWindow:
         self.root.title("Educoder助手")
         self.root.iconphoto(True, tk.PhotoImage(file='app.ico'))
         self.root.geometry("400x550")
-        self.root.resizable(False, True)
+        self.root.resizable(True, True)
 
         # 居中显示
         self.root.update_idletasks()
@@ -27,11 +29,171 @@ class LoginWindow:
         self.config_manager = ConfigManager()
         self.api_base_url = "http://yhsun.cn/server/index.php"
 
+        # 当前版本号 (全局变量)
+        self.CURRENT_VERSION = "0.1"
+
         # 获取或生成机器码
         self.machine_code = self.config_manager.get_machine_code()
 
+        # 先检查版本更新
+        self.check_update_before_login()
+
+    def check_update_before_login(self):
+        """登录前检查版本更新"""
+        # 创建检查更新提示窗口
+        self.checking_window = tk.Toplevel(self.root)
+        self.checking_window.title("检查更新")
+        self.checking_window.geometry("300x100")
+        self.checking_window.resizable(True, True)
+        self.checking_window.transient(self.root)
+        self.checking_window.grab_set()
+
+        # 居中显示
+        self.checking_window.update_idletasks()
+        x = (self.checking_window.winfo_screenwidth() - self.checking_window.winfo_width()) // 2
+        y = (self.checking_window.winfo_screenheight() - self.checking_window.winfo_height()) // 2
+        self.checking_window.geometry(f"+{x}+{y}")
+
+        # 添加标签和进度条
+        ttk.Label(self.checking_window, text="正在检查版本更新...", font=("微软雅黑", 10)).pack(pady=20)
+        self.progress = ttk.Progressbar(self.checking_window, mode='indeterminate', length=200)
+        self.progress.pack()
+        self.progress.start()
+
+        # 在新线程中执行版本检查
+        threading.Thread(target=self._perform_version_check, daemon=True).start()
+
+    def _perform_version_check(self):
+        """执行版本检查"""
+        try:
+            url = f"{self.api_base_url}?action=check_update"
+            data = {
+                "current_version": self.CURRENT_VERSION
+            }
+
+            response = requests.post(url, json=data, timeout=10)
+            result = response.json()
+
+            self.root.after(0, lambda: self._handle_update_result(result))
+
+        except requests.exceptions.Timeout:
+            self.root.after(0, lambda: self._handle_update_error("检查更新超时，请检查网络连接"))
+        except requests.exceptions.ConnectionError:
+            self.root.after(0, lambda: self._handle_update_error("网络连接错误，请检查网络连接"))
+        except Exception as e:
+            self.root.after(0, lambda: self._handle_update_error(f"检查更新失败: {str(e)}"))
+
+    def _handle_update_result(self, result):
+        """处理更新检查结果"""
+        # 关闭检查窗口
+        self.checking_window.destroy()
+
+        try:
+            if result.get('code') == 200:
+                data = result.get('data', {})
+
+                # 检查是否需要强制更新
+                if data.get('need_update', 0) == 1 and data.get('force_update', 0) == 1:
+                    # 需要强制更新，显示更新窗口，不允许登录
+                    self.show_update_window(data)
+                    return
+                elif data.get('need_update', 0) == 1:
+                    # 需要普通更新，询问用户是否更新
+                    self.ask_for_optional_update(data)
+                else:
+                    # 不需要更新，继续显示登录界面
+                    self.setup_ui()
+                    self.load_saved_credentials()
+                    self.root.deiconify()  # 显示主窗口
+            else:
+                # API返回错误，但仍然允许继续登录
+                messagebox.showwarning("警告", f"检查更新失败: {result.get('message', '未知错误')}\n将继续登录...")
+                self.setup_ui()
+                self.load_saved_credentials()
+                self.root.deiconify()
+
+        except Exception as e:
+            # 处理异常，仍然允许登录
+            messagebox.showwarning("警告", f"处理更新结果时出错: {str(e)}\n将继续登录...")
+            self.setup_ui()
+            self.load_saved_credentials()
+            self.root.deiconify()
+
+    def _handle_update_error(self, error_msg):
+        """处理更新检查错误"""
+        # 关闭检查窗口
+        self.checking_window.destroy()
+
+        # 显示错误信息，但仍然允许登录
+        messagebox.showwarning("警告", f"{error_msg}\n将继续登录...")
         self.setup_ui()
         self.load_saved_credentials()
+        self.root.deiconify()
+
+    def ask_for_optional_update(self, update_data):
+        """询问用户是否进行普通更新"""
+        response = messagebox.askyesno(
+            "发现新版本",
+            f"发现新版本 {update_data.get('latest_version', '')}\n"
+            f"更新内容：{update_data.get('update_content', '')}\n\n"
+            "是否立即更新？"
+        )
+
+        if response:
+            # 用户选择更新，显示更新窗口
+            self.show_update_window(update_data)
+        else:
+            # 用户选择不更新，继续登录
+            self.setup_ui()
+            self.load_saved_credentials()
+            self.root.deiconify()
+
+    def show_update_window(self, update_data):
+        """显示更新窗口"""
+        # 隐藏登录窗口
+        self.root.withdraw()
+
+        # 创建更新窗口
+        update_root = tk.Toplevel(self.root)
+        update_root.title("软件更新")
+        update_root.geometry("500x600")
+        update_root.resizable(True, True)
+
+        # 居中显示
+        update_root.update_idletasks()
+        x = (update_root.winfo_screenwidth() - update_root.winfo_width()) // 2
+        y = (update_root.winfo_screenheight() - update_root.winfo_height()) // 2
+        update_root.geometry(f"+{x}+{y}")
+
+        # 创建更新窗口实例
+        update_window = UpdateWindow(
+            update_root,
+            update_data,
+            self.CURRENT_VERSION,
+            lambda: self.on_update_completed()
+        )
+
+        # 设置关闭更新窗口时的行为
+        def on_update_window_close():
+            if update_data.get('force_update', 0) == 1:
+                # 强制更新时，关闭整个程序
+                self.root.destroy()
+            else:
+                # 普通更新时，返回登录界面
+                update_root.destroy()
+                self.root.deiconify()
+                self.setup_ui()
+                self.load_saved_credentials()
+
+        update_root.protocol("WM_DELETE_WINDOW", on_update_window_close)
+
+    def on_update_completed(self):
+        """更新完成后的回调"""
+        # 这里可以添加更新完成后的逻辑
+        # 例如：重新启动程序
+        messagebox.showinfo("更新完成", "更新完成，请重启程序")
+        self.root.destroy()
+        sys.exit(0)
 
     def setup_ui(self):
         """设置登录界面"""
@@ -46,6 +208,15 @@ class LoginWindow:
             font=("微软雅黑", 16, "bold")
         )
         title_label.pack(pady=(0, 10))
+
+        # 版本信息
+        version_label = ttk.Label(
+            main_frame,
+            text=f"版本: {self.CURRENT_VERSION}",
+            font=("微软雅黑", 9),
+            foreground="gray"
+        )
+        version_label.pack(pady=(0, 10))
 
         # 使用Notebook作为选择区
         self.notebook = ttk.Notebook(main_frame)

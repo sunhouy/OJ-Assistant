@@ -324,9 +324,25 @@ class EducoderAssistant:
             # 输入完成
             self.is_input_in_progress = False
 
+            """
             # 显示完成消息
             if not self.input_simulator.esc_pressed:
                 self.gui.root.after(0, lambda: self.input_simulator._show_completion_message())
+            """
+            # 只有在未按下ESC键的情况下才显示完成消息
+            if not self.input_simulator.esc_pressed:
+                # 更新最终进度
+                self.update_progress(100)
+                await self.send_progress_update(websocket)
+
+                # 发送输入完成消息
+                await websocket.send(json.dumps({
+                    "type": "input_complete",
+                    "success": True,
+                    "timestamp": datetime.now().isoformat()
+                }, ensure_ascii=False))
+                await websocket.send("✅ 代码输入完成")
+
 
         except Exception as e:
             self.gui.log(f"处理输入请求失败: {e}")

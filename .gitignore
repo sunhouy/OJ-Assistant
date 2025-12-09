@@ -1,5 +1,5 @@
 .vs/
 build/
 dist/
-EducoderAutoComplete/test
-EducoderAutoComplete/setup.txt
+Output/
+readme.md
