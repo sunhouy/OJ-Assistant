@@ -1,11 +1,8 @@
-﻿import asyncio
-import tkinter as tk
-from tkinter import ttk, messagebox
-import websockets
-import json
-from openai import AsyncOpenAI
-import re
+﻿import json
 from datetime import datetime
+
+import websockets
+from openai import AsyncOpenAI
 
 from utils.input_simulator import InputSimulator
 
@@ -31,21 +28,13 @@ class EducoderAssistant:
         self.current_code = None
         self.current_progress = 0  # 当前进度
 
-        self.gui.log(f"Assistant初始化，当前语言: {self.current_language.upper()}")
-
     def update_language(self, new_language):
         """更新当前语言设置"""
         self.current_language = new_language.lower()
-        self.gui.log(f"Assistant语言已更新为: {self.current_language.upper()}")
 
     async def server(self, websocket):
         """WebSocket服务器处理函数"""
-        self.gui.log(f"客户端连接: {websocket.remote_address}")
-        self.gui.log(f"服务器当前语言: {self.current_language.upper()}")
-
         try:
-            await websocket.send("欢迎使用Educoder助手，现在支持自动纠错功能")
-
             async for message in websocket:
                 try:
                     if isinstance(message, str):
@@ -100,15 +89,12 @@ class EducoderAssistant:
     def update_progress(self, progress):
         """更新进度"""
         self.current_progress = max(0, min(100, progress))
-        self.gui.log(f"进度更新: {self.current_progress}%")
 
-        # 更新GUI状态
-        self.gui.root.after(0, lambda: self.gui.update_status(f"进度: {self.current_progress}%"))
+        self.gui.root.after(0, lambda: self.gui.update_status(f"进度: {self.current_progress}%"))    # 更新GUI状态
 
     async def handle_educoder_content_auto_input(self, websocket, data):
         """处理题目内容并自动输入"""
         try:
-            self.gui.log("收到题目内容并开始自动输入")
             self.gui.log(f"当前使用语言: {self.current_language.upper()}")
 
             question_content = data.get('content', {})
@@ -131,11 +117,8 @@ class EducoderAssistant:
                                     lambda: self.gui.update_status(f"正在生成{self.current_language.upper()}代码..."))
 
                 # 发送初始进度
-                self.update_progress(5)
+                self.update_progress(10)
                 await self.send_progress_update(websocket)
-
-                await websocket.send(f"已收到题目内容，正在向DeepSeek请求{self.current_language.upper()}代码解决方案...")
-                await websocket.send(f"当前编程语言: {self.current_language.upper()}")
 
                 # 生成代码
                 full_code = await self.get_complete_code_solution(question_text)
@@ -143,10 +126,7 @@ class EducoderAssistant:
                 if full_code:
                     self.current_code = full_code
                     self.update_progress(30)  # 代码生成完成
-                    self.update_progress(10)  # 代码生成完成
                     await self.send_progress_update(websocket)
-
-                    await websocket.send("✅ 代码生成完成，准备开始自动输入...")
 
                     # 通知前端开始输入
                     await websocket.send(json.dumps({
@@ -158,9 +138,8 @@ class EducoderAssistant:
                     # 等待前端响应
                     self.gui.log("等待前端准备输入...")
                 else:
-                    await websocket.send("❌ 代码生成失败")
+                    await websocket.send("代码生成失败")
                     self.is_input_in_progress = False
-
             else:
                 await websocket.send("未找到有效的题目内容")
                 self.is_input_in_progress = False
@@ -247,13 +226,6 @@ class EducoderAssistant:
                     }, ensure_ascii=False))
 
             else:
-                # 所有测试通过
-                self.gui.log("所有测试通过！")
-                self.gui.root.after(0, lambda: self.gui.update_status("代码正确！"))
-
-                # 在Tk界面显示成功消息
-                self.gui.root.after(0, lambda: messagebox.showinfo("测试结果", "所有测试通过！代码正确。"))
-
                 await websocket.send(json.dumps({
                     "type": "test_results_response",
                     "success": True,
@@ -273,8 +245,6 @@ class EducoderAssistant:
     async def handle_ready_for_input(self, websocket, data):
         """处理准备输入请求"""
         try:
-            self.gui.log("收到准备输入请求")
-
             code = data.get('code', '')
             is_retry = data.get('is_retry', False)
             retry_count = data.get('retry_count', 0)
@@ -288,20 +258,18 @@ class EducoderAssistant:
             self.input_simulator.reset()
 
             # 更新进度
-            self.update_progress(60 if is_retry else 45)
-            self.update_progress(40 if is_retry else 50)
+            self.update_progress(60 if is_retry else 60)
+            self.update_progress(40 if is_retry else 40)
             await self.send_progress_update(websocket)
 
             if is_retry:
                 await websocket.send(f"开始第 {retry_count} 次纠错输入...")
-                self.gui.root.after(0, lambda: self.gui.update_status(f"正在输入纠错代码 (第{retry_count}次)..."))
             else:
                 await websocket.send("开始自动输入代码...")
-                self.gui.root.after(0, lambda: self.gui.update_status("正在输入代码..."))
 
             # 根据用户选择使用不同的输入方式
             if self.gui.use_copy_paste.get():
-                await websocket.send("使用复制粘贴模式...")
+                # await websocket.send("使用复制粘贴模式...")
                 success = self.input_simulator.paste_code(code)
 
                 if success:
@@ -309,26 +277,20 @@ class EducoderAssistant:
                     self.update_progress(100)
                     await self.send_progress_update(websocket)
 
-                    await websocket.send("✅ 代码已通过复制粘贴完成输入")
+                    # await websocket.send("代码已通过复制粘贴完成输入")
                     self.gui.root.after(0,
                                         lambda: self.gui.update_status(f"{self.current_language.upper()}代码输入完成"))
                 else:
                     if self.input_simulator.esc_pressed:
-                        await websocket.send("❌ 用户按ESC键终止了代码输入")
+                        await websocket.send("用户按ESC键终止了代码输入")
                     else:
-                        await websocket.send("❌ 代码粘贴失败")
+                        await websocket.send("代码粘贴失败")
             else:
-                await websocket.send("使用流式输入模式...")
+                # await websocket.send("使用流式输入模式...")
                 await self._stream_input_code(websocket, code)
 
             # 输入完成
             self.is_input_in_progress = False
-
-            """
-            # 显示完成消息
-            if not self.input_simulator.esc_pressed:
-                self.gui.root.after(0, lambda: self.input_simulator._show_completion_message())
-            """
             # 只有在未按下ESC键的情况下才显示完成消息
             if not self.input_simulator.esc_pressed:
                 # 更新最终进度
@@ -341,7 +303,7 @@ class EducoderAssistant:
                     "success": True,
                     "timestamp": datetime.now().isoformat()
                 }, ensure_ascii=False))
-                await websocket.send("✅ 代码输入完成")
+                await websocket.send("代码输入完成")
 
 
         except Exception as e:
@@ -360,7 +322,7 @@ class EducoderAssistant:
         for i, chunk in enumerate(chunks):
             # 检查ESC键是否被按下
             if self.input_simulator.esc_pressed:
-                await websocket.send("❌ 用户按ESC键终止了代码输入")
+                await websocket.send("用户按ESC键终止了代码输入")
                 break
 
             full_code += chunk
@@ -373,7 +335,7 @@ class EducoderAssistant:
             self.is_first_chunk = False
 
             # 计算进度
-            progress = 60 + int((i + 1) / len(chunks) * 40)  # 从60%到100%
+            progress = 60 + int((i + 1) / len(chunks) * 40)
             self.update_progress(progress)
 
             # 发送JSON格式的进度消息
@@ -388,9 +350,9 @@ class EducoderAssistant:
 
             if not input_success:
                 if self.input_simulator.esc_pressed:
-                    await websocket.send("❌ 用户按ESC键终止了代码输入")
+                    await websocket.send("用户按ESC键终止了代码输入")
                 else:
-                    await websocket.send("❌ 代码输入出现错误")
+                    await websocket.send("代码输入出现错误")
                 break
 
         # 只有在未按下ESC键的情况下才显示完成消息
@@ -405,7 +367,7 @@ class EducoderAssistant:
                 "success": True,
                 "timestamp": datetime.now().isoformat()
             }, ensure_ascii=False))
-            await websocket.send("✅ 代码输入完成")
+            # await websocket.send("✅ 代码输入完成")
 
     def _split_code_into_chunks(self, code, max_chunk_size=50):
         """将代码分割成小块"""
@@ -453,7 +415,7 @@ class EducoderAssistant:
             if response.choices and response.choices[0].message.content:
                 full_code = response.choices[0].message.content
                 cleaned_code = self.clean_code_response(full_code)
-                self.gui.log(f"代码重新生成成功，长度: {len(cleaned_code)} 字符")
+                # self.gui.log(f"代码重新生成成功，长度: {len(cleaned_code)} 字符")
                 return cleaned_code
             else:
                 self.gui.log("代码重新生成失败")
@@ -495,7 +457,7 @@ class EducoderAssistant:
 3. 确保新代码能够通过所有测试用例
 4. 只返回纯代码，不要有任何解释
 
-请生成修复后的{lang_name}代码：
+请生成修复后的完整{lang_name}代码：
 """
         print(prompt)
         return prompt
@@ -598,7 +560,6 @@ class EducoderAssistant:
 1. 代码应完整且可运行，必须包含头文件，主函数必须int main()形式
 2. 只返回代码，不要有任何额外的文字说明
 3. 使用标准库和常见的C语言编程实践
-4. 不要添加return 0语句
             """
         elif self.current_language == "C++":
             requirements = f"""
@@ -606,7 +567,6 @@ class EducoderAssistant:
 1. 代码应完整且可运行，必须包含必要的头文件，主函数必须int main()形式
 2. 只返回代码，不要有任何额外的文字说明
 3. 使用C++标准库和现代的C++编程实践
-4. 一定不要使用using namespace std。
             """
         elif self.current_language == "Java":
             requirements = f"""

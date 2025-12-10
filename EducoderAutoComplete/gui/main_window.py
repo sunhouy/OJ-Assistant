@@ -1,9 +1,6 @@
-﻿import asyncio
-import atexit
-import json
+﻿import atexit
 import os
 import queue
-import socket
 import subprocess
 import sys
 import threading
@@ -14,7 +11,6 @@ from tkinter import ttk, scrolledtext, messagebox
 
 import psutil
 import requests
-import websockets
 
 from core.server import ServerManager
 from gui.input_test import TestInputDialog
@@ -30,59 +26,8 @@ except ImportError:
     EXTENSION_SETUP_AVAILABLE = False
 
 
-def check_existing_instance():
-    """检查是否已有实例在运行"""
-    try:
-        # 尝试连接WebSocket服务器
-        response = requests.get("http://localhost:8000/status", timeout=2)
-        if response.status_code == 200:
-            return True
-    except:
-        pass
-
-    # 检查端口占用
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1)
-        result = sock.connect_ex(('localhost', 8000))
-        sock.close()
-        if result == 0:
-            return True
-    except:
-        pass
-
-    return False
-
-
-def activate_existing_instance():
-    """激活已运行的实例"""
-    try:
-        # 尝试通过WebSocket激活
-        asyncio.run(send_activate_signal())
-        return True
-    except:
-        try:
-            # 如果WebSocket失败，尝试通过HTTP激活
-            response = requests.post("http://localhost:8000/activate", timeout=2)
-            if response.status_code == 200:
-                return True
-        except:
-            pass
-    return False
-
-
-async def send_activate_signal():
-    """发送激活信号到已运行的实例"""
-    try:
-        async with websockets.connect("ws://localhost:8000", timeout=2) as websocket:
-            await websocket.send(json.dumps({"action": "activate_window"}))
-            return True
-    except:
-        return False
-
-
 class EducoderGUI:
-    CURRENT_VERSION = "0.1"  # 默认版本号
+    CURRENT_VERSION = "1.0"  # 版本号
 
     def __init__(self, root, username, token, machine_code=None, parent_window=None, current_version=None):
         self.root = root
@@ -101,6 +46,7 @@ class EducoderGUI:
         self.use_copy_paste = tk.BooleanVar(value=False)
         self.config_manager = ConfigManager()
         self.show_log_var = tk.BooleanVar(value=False)  # 默认不显示日志
+        self.autostart_var = tk.BooleanVar(value=False)  # 开机自启选项
         self.is_closing = False  # 标记是否正在关闭
 
         # 会员状态相关变量
@@ -124,7 +70,7 @@ class EducoderGUI:
 
         # 设置窗口属性
         self.root.title("Educoder助手")
-        self.root.geometry("850x520")  # 增加高度以适应超链接区域
+        self.root.geometry("1000x500")
         self.root.resizable(True, True)
 
         # 设置关闭窗口的处理
@@ -245,6 +191,14 @@ class EducoderGUI:
             command=self.toggle_log_visibility
         ).pack(side=tk.LEFT, padx=(20, 0))
 
+        # 新增开机自启复选框
+        ttk.Checkbutton(
+            options_frame,
+            text="开机自启",
+            variable=self.autostart_var,
+            command=self.toggle_autostart
+        ).pack(side=tk.LEFT, padx=(20, 0))
+
         # 服务器控制区域
         server_frame = ttk.LabelFrame(main_frame, text="服务器控制", padding="5")
         server_frame.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
@@ -298,7 +252,7 @@ class EducoderGUI:
             text="帮助中心",
             fg="blue",
             cursor="hand2",
-            font=("TkDefaultFont", 9)
+            font=("TkDefaultFont", 11)
         )
         help_link.pack(side=tk.LEFT, padx=(0, 20))
         help_link.bind("<Button-1>", lambda e: webbrowser.open("https://yhsun.cn/educoder/help"))
@@ -309,7 +263,7 @@ class EducoderGUI:
             text="用户协议与隐私政策",
             fg="blue",
             cursor="hand2",
-            font=("TkDefaultFont", 9)
+            font=("TkDefaultFont", 11)
         )
         terms_link.pack(side=tk.LEFT, padx=(0, 20))
         terms_link.bind("<Button-1>", lambda e: webbrowser.open("https://yhsun.cn/educoder/terms/"))
@@ -320,7 +274,7 @@ class EducoderGUI:
             text="开放源代码许可",
             fg="blue",
             cursor="hand2",
-            font=("TkDefaultFont", 9)
+            font=("TkDefaultFont", 11)
         )
         license_link.pack(side=tk.LEFT)
         license_link.bind("<Button-1>", lambda e: webbrowser.open("https://yhsun.cn/educoder/license"))
@@ -328,8 +282,44 @@ class EducoderGUI:
         # 启动日志处理
         self.process_log_queue()
 
+        # 检查当前开机自启状态
+        self.check_current_autostart()
+
         # 记录初始语言设置
         self.log(f"初始语言设置为: {self.selected_language.get().upper()}")
+
+    def check_current_autostart(self):
+        """检查当前的开机自启状态"""
+        try:
+            # 导入main.py中的函数
+            from main import check_autostart_enabled
+            app_name = "Educoder助手"
+            is_enabled = check_autostart_enabled(app_name)
+            self.autostart_var.set(is_enabled)
+            self.log(f"开机自启状态: {'已启用' if is_enabled else '未启用'}")
+        except Exception as e:
+            self.log(f"检查开机自启状态失败: {e}")
+
+    def toggle_autostart(self):
+        """切换开机自启状态"""
+        try:
+            # 导入main.py中的函数
+            from main import set_autostart_windows_registry
+            app_name = "Educoder助手"
+            path_to_exe = os.path.abspath(sys.argv[0])
+            enable = self.autostart_var.get()
+
+            success = set_autostart_windows_registry(app_name, path_to_exe, enable)
+            if success:
+                status = "已启用" if enable else "已禁用"
+                self.log(f"开机自启{status}")
+                self.status_var.set(f"开机自启{status}")
+            else:
+                self.log(f"设置开机自启失败")
+                self.status_var.set("设置开机自启失败")
+        except Exception as e:
+            self.log(f"切换开机自启状态失败: {e}")
+            self.status_var.set("设置开机自启失败")
 
     def check_member_status_and_start(self):
         """检查会员状态并根据状态决定是否启动服务器"""
@@ -810,7 +800,7 @@ class EducoderGUI:
         # 创建更新窗口
         update_root = tk.Toplevel(self.root)
         update_root.title("软件更新")
-        update_root.geometry("500x600")
+        update_root.geometry("600x600")
         update_root.resizable(True, True)
 
         # 居中显示
@@ -1015,35 +1005,3 @@ class EducoderGUI:
         except Exception as e:
             self.log(f"自动启动服务器时发生错误: {e}")
             messagebox.showerror("启动错误", f"自动启动服务器时发生错误:\n{e}")
-
-
-def main():
-    """程序主入口"""
-    # 检查是否已有实例在运行
-    if check_existing_instance():
-        print("检测到已有Educoder助手正在运行，正在激活窗口...")
-        if activate_existing_instance():
-            print("已成功激活现有窗口")
-            # 显示提示信息
-            root = tk.Tk()
-            root.withdraw()  # 隐藏主窗口
-            messagebox.showinfo("提示", "Educoder助手已在运行，请打开现有程序")
-            root.destroy()
-            sys.exit(0)
-        else:
-            print("无法激活现有窗口，请手动关闭已运行的实例")
-            # 显示错误信息
-            root = tk.Tk()
-            root.withdraw()  # 隐藏主窗口
-            messagebox.showerror("错误", "Educoder助手已在运行且无法激活，请关闭已运行的程序后再启动")
-            root.destroy()
-            sys.exit(1)
-    else:
-        # 没有现有实例，正常启动
-        root = tk.Tk()
-        app = EducoderGUI(root, "测试用户", "测试token")
-        root.mainloop()
-
-
-if __name__ == "__main__":
-    main()

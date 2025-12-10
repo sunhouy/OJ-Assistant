@@ -1,3 +1,4 @@
+/* 主容器样式 */
 .educoder-assistant {
     position: fixed;
     top: 20px;
@@ -12,23 +13,34 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     display: none;
     resize: both;
-    overflow: hidden;
-    min-width: 350px;
-    min-height: 52px;
+    overflow: auto;
+    min-width: 320px;
+    min-height: 400px;
+    max-width: 90vw;
+    max-height: 90vh;
+    transition: height 0.3s ease;
 }
 
-    .educoder-assistant.ea-visible {
-        display: flex;
-        flex-direction: column;
-    }
+.educoder-assistant.ea-visible {
+    display: flex;
+    flex-direction: column;
+}
 
-    .educoder-assistant.ea-minimized-state .ea-body {
-        display: none;
-    }
+/* 最小化状态 */
+.educoder-assistant.ea-minimized-state {
+    resize: none !important;
+    overflow: hidden !important;
+    min-height: 52px !important;
+    height: 52px !important;
+}
 
-    .educoder-assistant.ea-minimized-state .ea-minimized {
-        display: flex;
-    }
+.ea-minimized-state .ea-body {
+    display: none !important;
+}
+
+.ea-minimized-state .ea-header {
+    border-bottom: none;
+}
 
 /* 头部样式 */
 .ea-header {
@@ -42,6 +54,7 @@
     user-select: none;
     border-radius: 12px 12px 0 0;
     line-height: 1;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .ea-title {
@@ -58,7 +71,11 @@
 
 .fast-show {
     font-size: 10px;
-    color: #bbbbbb
+    color: #bbbbbb;
+    font-weight: normal;
+    line-height: 1.2;
+    display: block;
+    margin-top: 2px;
 }
 
 .ea-controls {
@@ -81,9 +98,9 @@
     transition: background 0.2s;
 }
 
-    .ea-btn:hover {
-        background: rgba(255, 255, 255, 0.3);
-    }
+.ea-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
 
 /* 主体内容 */
 .ea-body {
@@ -94,34 +111,6 @@
     padding: 0;
     overflow-y: auto;
 }
-
-/* 提示内容 */
-.ea-alert {
-    padding-left: 15px;
-    padding-right: 15px;
-    padding-top: 15px;
-    color: #333
-}
-
-.ea-section {
-    padding-left: 16px;
-    padding-right: 16px;
-    padding-top: 16px;
-    border-bottom: 0px solid #f0f0f0;
-}
-
-    .ea-section:last-child {
-        border-bottom: none;
-    }
-
-    .ea-section h4 {
-        margin: 0 0 12px 0;
-        font-size: 13px;
-        font-weight: 600;
-        color: #333;
-    }
-
-
 
 /* 状态区域 */
 .ea-status {
@@ -138,14 +127,14 @@
     font-size: 12px;
 }
 
-    .ea-status-item:last-child {
-        margin-bottom: 0;
-    }
+.ea-status-item:last-child {
+    margin-bottom: 0;
+}
 
-    .ea-status-item span:first-child {
-        color: #666;
-        min-width: 40px;
-    }
+.ea-status-item span:first-child {
+    color: #666;
+    min-width: 40px;
+}
 
 .ea-status-value {
     font-weight: 500;
@@ -159,62 +148,61 @@
     background: #dc3545;
 }
 
-    .ea-status-indicator.ea-connected {
-        background: #28a745;
-        animation: ea-pulse 2s infinite;
-    }
+.ea-status-indicator.ea-connected {
+    background: #28a745;
+    animation: ea-pulse 2s infinite;
+}
 
-    .ea-status-indicator.ea-connecting {
-        background: #ffc107;
-    }
+.ea-status-indicator.ea-connecting {
+    background: #ffc107;
+}
 
 @keyframes ea-pulse {
     0% {
         opacity: 1;
     }
-
     50% {
         opacity: 0.5;
     }
-
     100% {
         opacity: 1;
     }
 }
 
-/* 输入和按钮 */
-.ea-input-group {
-    margin-bottom: 12px;
+/* 区块样式 */
+.ea-section {
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: 16px;
+    border-bottom: 0px solid #f0f0f0;
 }
 
-    .ea-input-group label {
-        display: block;
-        font-size: 12px;
-        font-weight: 500;
-        margin-bottom: 4px;
-        color: #333;
-    }
-
-.ea-input {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    font-size: 12px;
-    box-sizing: border-box;
+.ea-section:last-child {
+    border-bottom: none;
 }
 
-    .ea-input:focus {
-        outline: none;
-        border-color: #667eea;
-        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
-    }
+.ea-section h4 {
+    margin: 0 0 12px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+}
 
+/* 按钮组 */
 .ea-button-group {
     display: flex;
     gap: 8px;
 }
 
+.ea-button-group button {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 按钮样式 */
 .ea-primary {
     background: #667eea;
     color: white;
@@ -226,9 +214,9 @@
     flex: 1;
 }
 
-    .ea-primary:hover:not(:disabled) {
-        background: #5a6fd8;
-    }
+.ea-primary:hover:not(:disabled) {
+    background: #5a6fd8;
+}
 
 .ea-secondary {
     background: #6c757d;
@@ -241,9 +229,9 @@
     flex: 1;
 }
 
-    .ea-secondary:hover:not(:disabled) {
-        background: #5a6268;
-    }
+.ea-secondary:hover:not(:disabled) {
+    background: #5a6268;
+}
 
 .ea-success {
     background: #28a745;
@@ -256,9 +244,39 @@
     flex: 1;
 }
 
-    .ea-success:hover:not(:disabled) {
-        background: #218838;
-    }
+.ea-success:hover:not(:disabled) {
+    background: #218838;
+}
+
+.ea-danger {
+    background: #dc3545;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    flex: 1;
+}
+
+.ea-danger:hover:not(:disabled) {
+    background: #c82333;
+}
+
+.ea-warning {
+    background: #ffc107;
+    color: #212529;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    flex: 1;
+}
+
+.ea-warning:hover:not(:disabled) {
+    background: #e0a800;
+}
 
 .ea-btn:disabled {
     background: #ccc;
@@ -283,9 +301,9 @@
     overflow: hidden;
 }
 
-    .ea-preview:last-child {
-        margin-bottom: 0;
-    }
+.ea-preview:last-child {
+    margin-bottom: 0;
+}
 
 .ea-preview-header {
     background: #f8f9fa;
@@ -306,16 +324,15 @@
 .ea-preview-content {
     padding: 12px;
     background: white;
-    max-height: 120px;
+    max-height: 140px;
     overflow-y: auto;
     font-size: 11px;
     line-height: 1.4;
 }
 
-.ea-code-preview {
-    background: #1e1e1e;
-    color: #d4d4d4;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+.ea-preview-text {
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .ea-preview-meta {
@@ -324,16 +341,6 @@
     margin-bottom: 8px;
     padding-bottom: 8px;
     border-bottom: 1px solid #f0f0f0;
-}
-
-.ea-code-preview .ea-preview-meta {
-    color: #888;
-    border-bottom: 1px solid #333;
-}
-
-.ea-preview-text {
-    white-space: pre-wrap;
-    word-break: break-word;
 }
 
 .ea-placeholder {
@@ -369,30 +376,30 @@
     border-left: 3px solid #ccc;
 }
 
-    .ea-log-item.ea-sent {
-        background: #e3f2fd;
-        border-left-color: #2196f3;
-    }
+.ea-log-item.ea-sent {
+    background: #e3f2fd;
+    border-left-color: #2196f3;
+}
 
-    .ea-log-item.ea-received {
-        background: #e8f5e8;
-        border-left-color: #4caf50;
-    }
+.ea-log-item.ea-received {
+    background: #e8f5e8;
+    border-left-color: #4caf50;
+}
 
-    .ea-log-item.ea-system {
-        background: #fff3e0;
-        border-left-color: #ff9800;
-    }
+.ea-log-item.ea-system {
+    background: #fff3e0;
+    border-left-color: #ff9800;
+}
 
-    .ea-log-item.ea-error {
-        background: #ffebee;
-        border-left-color: #f44336;
-    }
+.ea-log-item.ea-error {
+    background: #ffebee;
+    border-left-color: #f44336;
+}
 
-    .ea-log-item.ea-warning {
-        background: #fff3cd;
-        border-left-color: #ffc107;
-    }
+.ea-log-item.ea-warning {
+    background: #fff3cd;
+    border-left-color: #ffc107;
+}
 
 .ea-log-time {
     font-size: 9px;
@@ -404,67 +411,19 @@
     word-break: break-word;
 }
 
-/* 最小化状态 */
-.ea-minimized {
-    display: none;
-    padding: 8px 12px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    font-weight: 500;
-    cursor: move;
-    border-radius: 12px;
-}
-
-
-
-/* 滚动条 */
-.ea-preview-content::-webkit-scrollbar,
-.ea-log-container::-webkit-scrollbar {
-    width: 4px;
-}
-
-.ea-preview-content::-webkit-scrollbar-track,
-.ea-log-container::-webkit-scrollbar-track {
-    background: #f1f1f1;
-}
-
-.ea-preview-content::-webkit-scrollbar-thumb,
-.ea-log-container::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 2px;
-}
-
-    .ea-preview-content::-webkit-scrollbar-thumb:hover,
-    .ea-log-container::-webkit-scrollbar-thumb:hover {
-        background: #a8a8a8;
-    }
-
-.ea-code-preview::-webkit-scrollbar-track {
-    background: #2d2d2d;
-}
-
-.ea-code-preview::-webkit-scrollbar-thumb {
-    background: #555;
-}
-
 /* 测试结果文本框样式 */
 .ea-testresult-textarea {
     width: 100%;
-    height: 80px;
+    height: 200px;
     padding: 8px;
-    border: 1px solid #ddd;
+    border: 1px solid #444;
     border-radius: 4px;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 11px;
+    background: #222;
+    color: #fff;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
     line-height: 1.4;
-    background: #f8f9fa;
     resize: vertical;
-    overflow-y: auto;
-    white-space: pre;
-    tab-size: 4;
 }
 
 .ea-testresult-textarea:focus {
@@ -473,287 +432,7 @@
     box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
 }
 
-.ea-testresult-textarea::-webkit-scrollbar {
-    width: 6px;
-}
-
-.ea-testresult-textarea::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 3px;
-}
-
-.ea-testresult-textarea::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 3px;
-}
-
-.ea-testresult-textarea::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8;
-}
-
-/* 警告按钮样式（用于测试结果按钮） */
-.ea-warning {
-    background: #ffc107;
-    color: #212529;
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
-    font-size: 12px;
-    cursor: pointer;
-    flex: 1;
-}
-
-.ea-warning:hover:not(:disabled) {
-    background: #e0a800;
-}
-
-/* 调整预览区域高度 */
-.ea-preview-content {
-    padding: 12px;
-    background: white;
-    max-height: 140px;
-    overflow-y: auto;
-    font-size: 11px;
-    line-height: 1.4;
-}
-
-/* 在原有CSS中添加以下样式 */
-
-/* 测试结果文本框样式 */
-.ea-testresult-textarea {
-    width: 100%;
-    height: 120px;
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 11px;
-    line-height: 1.4;
-    background: #f8f9fa;
-    resize: vertical;
-    overflow-y: auto;
-    white-space: pre;
-    tab-size: 4;
-}
-
-.ea-testresult-textarea:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
-}
-
-/* 失败预览样式 */
-.ea-failures-summary {
-    font-size: 12px;
-    font-weight: 600;
-    color: #dc3545;
-    margin-bottom: 8px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid #e9ecef;
-}
-
-.ea-failure-item {
-    margin-bottom: 10px;
-    padding: 8px;
-    border: 1px solid #f5c6cb;
-    border-radius: 4px;
-    background: #f8d7da;
-    font-size: 11px;
-}
-
-.ea-failure-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 6px;
-    font-weight: 600;
-}
-
-.ea-error-type {
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 3px;
-    background: #dc3545;
-    color: white;
-}
-
-.ea-failure-detail {
-    line-height: 1.4;
-}
-
-.ea-failure-detail div {
-    margin-bottom: 2px;
-    word-break: break-word;
-}
-
-/* 按钮样式更新 */
-.ea-warning {
-    background: #ffc107;
-    color: #212529;
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
-    font-size: 12px;
-    cursor: pointer;
-    flex: 1;
-}
-
-.ea-warning:hover:not(:disabled) {
-    background: #e0a800;
-}
-
-.ea-danger {
-    background: #dc3545;
-    color: white;
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
-    font-size: 12px;
-    cursor: pointer;
-    flex: 1;
-}
-
-.ea-danger:hover:not(:disabled) {
-    background: #c82333;
-}
-
-/* 调整预览区域高度 */
-.ea-preview-content {
-    padding: 12px;
-    background: white;
-    max-height: 140px;
-    overflow-y: auto;
-    font-size: 11px;
-    line-height: 1.4;
-}
-
-/* 滚动条样式 */
-.ea-testresult-textarea::-webkit-scrollbar,
-.ea-preview-content::-webkit-scrollbar {
-    width: 6px;
-}
-
-.ea-testresult-textarea::-webkit-scrollbar-track,
-.ea-preview-content::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 3px;
-}
-
-.ea-testresult-textarea::-webkit-scrollbar-thumb,
-.ea-preview-content::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 3px;
-}
-
-.ea-testresult-textarea::-webkit-scrollbar-thumb:hover,
-.ea-preview-content::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8;
-}
-
-/* 在原有CSS中添加以下样式 */
-
-/* 测试结果文本框样式 */
-.ea-testresult-textarea {
-    width: 100%;
-    height: 120px;
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 11px;
-    line-height: 1.4;
-    background: #f8f9fa;
-    resize: vertical;
-    overflow-y: auto;
-    white-space: pre;
-    tab-size: 4;
-}
-
-.ea-testresult-textarea:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
-}
-
-/* 按钮样式 */
-.ea-success {
-    background: #28a745;
-    color: white;
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
-    font-size: 12px;
-    cursor: pointer;
-    flex: 1;
-}
-
-.ea-success:hover:not(:disabled) {
-    background: #218838;
-}
-
-.ea-danger {
-    background: #dc3545;
-    color: white;
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
-    font-size: 12px;
-    cursor: pointer;
-    flex: 1;
-}
-
-.ea-danger:hover:not(:disabled) {
-    background: #c82333;
-}
-
-/* 按钮组布局 */
-.ea-button-group {
-    display: flex;
-    gap: 8px;
-}
-
-.ea-button-group button {
-    flex: 1;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* 调整预览区域高度 */
-.ea-preview-content {
-    padding: 12px;
-    background: white;
-    max-height: 140px;
-    overflow-y: auto;
-    font-size: 11px;
-    line-height: 1.4;
-}
-
-/* 滚动条样式 */
-.ea-testresult-textarea::-webkit-scrollbar,
-.ea-preview-content::-webkit-scrollbar {
-    width: 6px;
-}
-
-.ea-testresult-textarea::-webkit-scrollbar-track,
-.ea-preview-content::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 3px;
-}
-
-.ea-testresult-textarea::-webkit-scrollbar-thumb,
-.ea-preview-content::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 3px;
-}
-
-.ea-testresult-textarea::-webkit-scrollbar-thumb:hover,
-.ea-preview-content::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8;
-}
-
-/* 顶部提示条样式 - 不遮挡编辑区域 */
+/* 顶部提示条样式 */
 .ea-top-tip-overlay {
     position: fixed;
     top: 0;
@@ -866,8 +545,43 @@
     border: 1px solid rgba(255, 193, 7, 0.3);
 }
 
+/* 滚动条样式 */
+.ea-preview-content::-webkit-scrollbar,
+.ea-log-container::-webkit-scrollbar,
+.ea-testresult-textarea::-webkit-scrollbar {
+    width: 6px;
+}
+
+.ea-preview-content::-webkit-scrollbar-track,
+.ea-log-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.ea-testresult-textarea::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.ea-preview-content::-webkit-scrollbar-thumb,
+.ea-log-container::-webkit-scrollbar-thumb,
+.ea-testresult-textarea::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.ea-preview-content::-webkit-scrollbar-thumb:hover,
+.ea-log-container::-webkit-scrollbar-thumb:hover,
+.ea-testresult-textarea::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
 /* 响应式调整 */
 @media (max-width: 768px) {
+    .educoder-assistant {
+        width: 350px;
+        height: 500px;
+    }
+
     .ea-top-tip-overlay {
         height: 50px;
     }

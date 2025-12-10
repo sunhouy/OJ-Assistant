@@ -33,47 +33,8 @@ class EducoderFloatingAssistant {
         this.attachEventListeners();
         await this.loadSettings();
         this.extractPageContent();
-        this.addStyle(); // 添加CSS样式
 
         await this.autoConnect();
-    }
-
-    addStyle() {
-        const style = document.createElement('style');
-        style.textContent = `
-            .educoder-assistant {
-                resize: both;
-                overflow: auto;
-                min-width: 320px;
-                min-height: 400px;
-                max-width: 90vw;
-                max-height: 90vh;
-            }
-
-            .ea-minimized-state {
-                resize: none !important;
-            }
-
-            .ea-testresult-textarea {
-                width: 100%;
-                height: 200px;
-                padding: 8px;
-                border: 1px solid #444;
-                border-radius: 4px;
-                background: #222;
-                color: #fff;
-                font-family: 'Courier New', monospace;
-                font-size: 12px;
-                line-height: 1.4;
-                resize: vertical;
-            }
-
-            .ea-preview-content {
-                max-height: 300px;
-                overflow-y: auto;
-            }
-        `;
-        document.head.appendChild(style);
     }
 
     createTopTipOverlay() {
@@ -274,12 +235,6 @@ class EducoderFloatingAssistant {
                 <!-- 服务器连接 -->
                 <div class="ea-section">
                     <h4>服务器连接</h4>
-                    <!--
-                    <div class="ea-static-address">
-                        <span>服务器地址：</span>
-                        <code>ws://localhost:8000</code>
-                    </div>
-                    -->
                     <div class="ea-button-group">
                         <button id="eaConnectBtn" class="ea-btn ea-primary">连接</button>
                         <button id="eaDisconnectBtn" class="ea-btn ea-secondary" disabled>断开</button>
@@ -952,16 +907,11 @@ class EducoderFloatingAssistant {
 
     // 修复的extractTestResults函数，正确区分测试输入和预期输出/实际输出
     extractTestResults() {
-        console.log('开始提取测试结果...');
-
         // 查找测试结果容器
         const resultContainer = document.querySelector('.test-set-container___JHp4n');
         if (!resultContainer) {
-            console.log('未找到测试结果容器');
             return null;
         }
-
-        console.log('找到测试结果容器');
 
         // 提取错误信息
         let errorInfo = '';
@@ -983,7 +933,6 @@ class EducoderFloatingAssistant {
         // 提取测试集信息
         const testSets = [];
         const testSetElements = resultContainer.querySelectorAll('.test-case-item___E3CU9');
-        console.log(`找到 ${testSetElements.length} 个测试集`);
 
         testSetElements.forEach((testSetElement, index) => {
             try {
@@ -1060,11 +1009,6 @@ class EducoderFloatingAssistant {
                     actual: actualOutput || '未找到实际输出'
                 });
 
-                console.log(`提取测试集 ${testSetName}:`);
-                console.log('测试输入:', testInput.substring(0, 100) + (testInput.length > 100 ? '...' : ''));
-                console.log('预期输出:', expectedOutput.substring(0, 100) + (expectedOutput.length > 100 ? '...' : ''));
-                console.log('实际输出:', actualOutput.substring(0, 100) + (actualOutput.length > 100 ? '...' : ''));
-
             } catch (error) {
                 console.error('提取测试集时出错:', error);
             }
@@ -1131,7 +1075,6 @@ class EducoderFloatingAssistant {
             }
         };
 
-        console.log('提取的测试结果:', result);
         return result;
     }
 
@@ -1273,23 +1216,60 @@ class EducoderFloatingAssistant {
     }
 
     minimize() {
-        this.container.style.resize = 'none';
+        // 保存当前窗口尺寸
+        const computedStyle = window.getComputedStyle(this.container);
+        this.savedDimensions = {
+            width: computedStyle.width,
+            height: computedStyle.height,
+            resize: computedStyle.resize
+        };
+
         this.container.classList.add('ea-minimized-state');
         this.isMinimized = true;
         this.minimizeBtn.setAttribute('title', '恢复');
         this.minimizeBtn.textContent = '↗';
-        this.currentStyle = [this.container.style.width, this.container.style.height];
+
+        // 设置最小化状态
         this.container.style.height = '52px';
+        this.container.style.overflow = 'hidden';
+        this.container.style.resize = 'none';
+
+        // 隐藏 body 内容，只保留 header
+        const body = this.container.querySelector('.ea-body');
+        if (body) {
+            body.style.display = 'none';
+        }
     }
 
     restore() {
-        this.container.style.resize = 'both';
         this.container.classList.remove('ea-minimized-state');
         this.isMinimized = false;
         this.minimizeBtn.setAttribute('title', '最小化');
         this.minimizeBtn.textContent = '-';
-        if (this.currentStyle && this.currentStyle[1]) {
-            this.container.style.height = this.currentStyle[1];
+
+        // 恢复窗口尺寸和属性
+        this.container.style.overflow = 'auto';
+        this.container.style.resize = 'both';
+
+        // 恢复 body 显示
+        const body = this.container.querySelector('.ea-body');
+        if (body) {
+            body.style.display = 'block';
+        }
+
+        // 如果有保存的尺寸，恢复它们
+        if (this.savedDimensions) {
+            // 使用 requestAnimationFrame 确保样式更新
+            requestAnimationFrame(() => {
+                this.container.style.width = this.savedDimensions.width;
+                this.container.style.height = this.savedDimensions.height;
+            });
+        } else {
+            // 如果没有保存的尺寸，设置默认尺寸
+            requestAnimationFrame(() => {
+                this.container.style.width = '400px';
+                this.container.style.height = '500px';
+            });
         }
     }
 

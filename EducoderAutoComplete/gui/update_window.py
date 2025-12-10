@@ -8,6 +8,9 @@ from urllib.parse import urlparse
 
 import requests
 
+# 导入配置管理器
+from utils.config import config_manager
+
 
 class UpdateWindow:
     def __init__(self, root, update_data, current_version, on_update_complete=None):
@@ -22,6 +25,11 @@ class UpdateWindow:
         self.total_size = 0
         self.downloaded_size = 0
         self.download_start_time = 0
+
+        # 获取数据目录并创建下载目录
+        self.data_dir = config_manager.get_data_dir()
+        self.downloads_dir = os.path.join(self.data_dir, "downloads")
+        os.makedirs(self.downloads_dir, exist_ok=True)
 
         self.setup_ui()
 
@@ -107,6 +115,14 @@ class UpdateWindow:
         )
         self.speed_label.pack()
 
+        # 下载目录信息
+        ttk.Label(
+            download_frame,
+            text=f"下载目录: {self.downloads_dir}",
+            font=("微软雅黑", 8),
+            foreground="gray"
+        ).pack(pady=(5, 0))
+
         # 按钮框架
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X)
@@ -129,6 +145,15 @@ class UpdateWindow:
             state="disabled"
         )
         self.run_button.pack(side=tk.LEFT)
+
+        # 打开下载目录按钮
+        self.open_dir_button = ttk.Button(
+            button_frame,
+            text="打开下载目录",
+            command=self.open_downloads_dir,
+            width=15
+        )
+        self.open_dir_button.pack(side=tk.LEFT, padx=(10, 0))
 
         # 强制更新提示
         if self.update_data.get('force_update', 0) == 1:
@@ -209,9 +234,22 @@ class UpdateWindow:
         if not filename:
             filename = "update_win64.exe"
 
-        # 设置下载路径
-        self.download_path = os.path.join(os.getcwd(), filename)
+        # 设置下载路径（使用数据目录下的downloads子目录）
+        self.download_path = os.path.join(self.downloads_dir, filename)
         print(f"[INFO] 下载路径: {self.download_path}")
+
+        # 如果文件已存在，询问是否覆盖
+        if os.path.exists(self.download_path):
+            response = messagebox.askyesno("文件已存在",
+                f"文件 '{filename}' 已存在，是否覆盖？\n\n路径: {self.download_path}")
+            if not response:
+                print("[INFO] 用户取消覆盖，重新生成文件名")
+                # 生成带时间戳的新文件名
+                name, ext = os.path.splitext(filename)
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                filename = f"{name}_{timestamp}{ext}"
+                self.download_path = os.path.join(self.downloads_dir, filename)
+                print(f"[INFO] 新下载路径: {self.download_path}")
 
         # 禁用下载按钮
         self.download_button.config(state="disabled")
@@ -353,9 +391,10 @@ class UpdateWindow:
         self.run_button.config(state="normal")
 
         # 显示完成消息
-        messagebox.showinfo("下载完成", "更新文件下载完成，请点击'运行更新程序'进行安装。")
+        messagebox.showinfo("下载完成",
+            f"更新文件下载完成！\n\n文件位置: {self.download_path}\n\n请点击'运行更新程序'进行安装。")
 
-        print("[INFO] 下载完成，文件已保存")
+        print(f"[INFO] 下载完成，文件已保存到: {self.download_path}")
 
     def on_download_cancelled(self):
         """下载取消处理"""
@@ -421,3 +460,24 @@ class UpdateWindow:
             error_msg = f"运行更新程序失败: {str(e)}"
             print(f"[ERROR] {error_msg}")
             messagebox.showerror("错误", error_msg)
+
+    def open_downloads_dir(self):
+        """打开下载目录"""
+        try:
+            if os.path.exists(self.downloads_dir):
+                if platform.system() == "Windows":
+                    os.startfile(self.downloads_dir)
+                elif platform.system() == "Darwin":  # macOS
+                    subprocess.Popen(["open", self.downloads_dir])
+                else:  # Linux
+                    subprocess.Popen(["xdg-open", self.downloads_dir])
+                print(f"[INFO] 已打开下载目录: {self.downloads_dir}")
+            else:
+                messagebox.showinfo("提示", f"下载目录不存在: {self.downloads_dir}")
+        except Exception as e:
+            print(f"[ERROR] 打开下载目录失败: {str(e)}")
+            messagebox.showerror("错误", f"打开下载目录失败: {str(e)}")
+
+
+# 添加platform模块导入用于打开目录功能
+import platform

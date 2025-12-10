@@ -6,6 +6,16 @@ from tkinter import ttk, messagebox
 
 import requests
 
+# 尝试导入Windows API相关模块
+try:
+    import win32event
+    import win32api
+    import winerror
+
+    WINDOWS_API_AVAILABLE = True
+except ImportError:
+    WINDOWS_API_AVAILABLE = False
+
 from gui.dialogs import FirstRunDialog
 from gui.main_window import EducoderGUI
 from gui.update_window import UpdateWindow
@@ -16,7 +26,13 @@ class LoginWindow:
     def __init__(self, root):
         self.root = root
         self.root.title("Educoder助手")
-        self.root.iconphoto(True, tk.PhotoImage(file='app.ico'))
+
+        # 尝试设置图标，如果文件存在
+        try:
+            self.root.iconphoto(True, tk.PhotoImage(file='app.ico'))
+        except:
+            pass
+
         self.root.geometry("400x550")
         self.root.resizable(True, True)
 
@@ -29,21 +45,80 @@ class LoginWindow:
         self.config_manager = ConfigManager()
         self.api_base_url = "http://yhsun.cn/server/index.php"
 
-        # 当前版本号 (全局变量)
-        self.CURRENT_VERSION = "0.1"
+        # 版本号
+        self.CURRENT_VERSION = "1.0"
 
         # 获取或生成机器码
         self.machine_code = self.config_manager.get_machine_code()
 
+        # 互斥锁句柄
+        self.mutex_handle = None
+
+        # 后台检查单实例
+        self.check_single_instance_in_background()
+
         # 先检查版本更新
         self.check_update_before_login()
+
+    def check_single_instance_in_background(self):
+        """在后台线程中检查单实例"""
+        threading.Thread(target=self._check_single_instance_thread, daemon=True).start()
+
+    def _check_single_instance_thread(self):
+        """检查单实例的线程函数"""
+        # 使用命名互斥锁检测单实例
+        mutex_name = "Global\\EducoderAssistantMutex_{}".format(self.machine_code)
+
+        if WINDOWS_API_AVAILABLE:
+            try:
+                # 尝试创建互斥锁
+                self.mutex_handle = win32event.CreateMutex(None, False, mutex_name)
+                last_error = win32api.GetLastError()
+
+                if last_error == winerror.ERROR_ALREADY_EXISTS:
+                    # 互斥锁已存在，说明程序已在运行
+                    self.root.after(0, self._show_instance_running_warning)
+                    return
+            except Exception as e:
+                print(f"互斥锁创建失败: {e}")
+                # 如果互斥锁创建失败，使用其他方法检测
+                self._fallback_instance_check()
+        else:
+            # 如果Windows API不可用，使用备用方法
+            self._fallback_instance_check()
+
+    def _fallback_instance_check(self):
+        """备用方法检测单实例"""
+        try:
+            import socket
+            import psutil
+            import os
+
+            # 检查端口占用
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            result = sock.connect_ex(('localhost', 8000))
+            sock.close()
+
+            if result == 0:
+                self.root.after(0, self._show_instance_running_warning)
+        except:
+            pass
+
+    def _show_instance_running_warning(self):
+        """显示程序已在运行的警告"""
+        # 显示提示信息
+        messagebox.showinfo("提示", "已有程序在后台运行，请打开正在运行的程序")
+
+        # 关闭当前窗口
+        self.root.after(100, self.root.destroy)
 
     def check_update_before_login(self):
         """登录前检查版本更新"""
         # 创建检查更新提示窗口
         self.checking_window = tk.Toplevel(self.root)
         self.checking_window.title("检查更新")
-        self.checking_window.geometry("300x100")
+        self.checking_window.geometry("300x150")
         self.checking_window.resizable(True, True)
         self.checking_window.transient(self.root)
         self.checking_window.grab_set()
@@ -135,7 +210,7 @@ class LoginWindow:
         response = messagebox.askyesno(
             "发现新版本",
             f"发现新版本 {update_data.get('latest_version', '')}\n"
-            f"更新内容：{update_data.get('update_content', '')}\n\n"
+            f"更新内容：{update_data.get('update_content', '')}\n"
             "是否立即更新？"
         )
 
@@ -156,7 +231,7 @@ class LoginWindow:
         # 创建更新窗口
         update_root = tk.Toplevel(self.root)
         update_root.title("软件更新")
-        update_root.geometry("500x600")
+        update_root.geometry("600x600")
         update_root.resizable(True, True)
 
         # 居中显示

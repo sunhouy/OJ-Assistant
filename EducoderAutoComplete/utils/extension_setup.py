@@ -123,7 +123,7 @@ class FloatingTipWindow:
         self.parent = parent
         self.window = tk.Toplevel(parent)
         self.window.title("安装步骤")
-        self.window.geometry("600x400")  # 初始大小
+        self.window.geometry("700x400")  # 初始大小
 
         # 移除系统标题栏（最小化、最大化、关闭按钮）
         self.window.overrideredirect(True)
@@ -148,7 +148,7 @@ class FloatingTipWindow:
             "第一步：获取Edge浏览器版本",
             "第二步：下载WebDriver",
             "第三步：启动浏览器加载扩展",
-            "第四步：登录头歌网站开始使用"
+            "第四步：在桌面应用启动服务器后开始使用"
         ]
 
         self.setup_ui()
@@ -180,11 +180,11 @@ class FloatingTipWindow:
         title_frame.pack_propagate(False)
 
         # 标题
-        tk.Label(title_frame, text="安装步骤", font=('Microsoft YaHei', 12, 'bold'),
+        tk.Label(title_frame, text="安装步骤", font=('微软雅黑', 12, 'bold'),
                  bg='#4a86e8', fg='white').pack(side='left', padx=10)
 
         # 自定义关闭按钮
-        close_btn = tk.Button(title_frame, text="×", font=('Microsoft YaHei', 14),
+        close_btn = tk.Button(title_frame, text="×", font=('微软雅黑', 14),
                               bg='#4a86e8', fg='white', bd=0,
                               command=self.hide, cursor='hand2')
         close_btn.pack(side='right', padx=10, pady=5)
@@ -204,12 +204,12 @@ class FloatingTipWindow:
             frame.pack(fill='x', pady=5)
 
             # 步骤编号
-            num_label = tk.Label(frame, text=str(i + 1), font=('Microsoft YaHei', 12, 'bold'),
+            num_label = tk.Label(frame, text=str(i + 1), font=('微软雅黑', 12, 'bold'),
                                  width=3, height=1, bg='#e0e0e0')
             num_label.pack(side='left', padx=(0, 10))
 
             # 步骤文本
-            step_label = tk.Label(frame, text=step, font=('Microsoft YaHei', 10),
+            step_label = tk.Label(frame, text=step, font=('微软雅黑', 10),
                                   bg='white', anchor='w')
             step_label.pack(side='left', fill='x', expand=True)
 
@@ -220,7 +220,7 @@ class FloatingTipWindow:
                                            text="请点击'开始安装'以自动安装拓展\n\n"
                                                 "拓展安装成功后，如出现'关闭开发人员模式下的拓展'提示，\n"
                                                 "点击右上角叉号关闭提示即可，切勿点击'关闭拓展'！",
-                                           font=('Microsoft YaHei', 10, 'bold'),
+                                           font=('微软雅黑', 10, 'bold'),
                                            bg='#e8f4f8', fg='#2c7da0', justify='left')
         self.current_step_label.pack(fill='x', pady=10, padx=5)
 
@@ -252,7 +252,7 @@ class FloatingTipWindow:
             elif i == step_index:
                 # 当前步骤
                 num_label.config(bg='#2196F3', fg='white')
-                step_label.config(fg='#2196F3', font=('Microsoft YaHei', 10, 'bold'))
+                step_label.config(fg='#2196F3', font=('微软雅黑', 10, 'bold'))
             else:
                 # 未开始步骤
                 num_label.config(bg='#e0e0e0', fg='black')
@@ -355,7 +355,7 @@ class EducoderAutoCompleteApp:
         title_frame.pack_propagate(False)
 
         tk.Label(title_frame, text="浏览器启动工具",
-                 font=('Microsoft YaHei', 20, 'bold'), bg=self.primary_color,
+                 font=('微软雅黑', 20, 'bold'), bg=self.primary_color,
                  fg='white').pack(pady=15)
 
         # 主内容区域
@@ -368,7 +368,7 @@ class EducoderAutoCompleteApp:
 
         # 步骤说明
         steps_frame = tk.LabelFrame(control_frame, text="提示",
-                                    font=('Microsoft YaHei', 11, 'bold'),
+                                    font=('微软雅黑', 11, 'bold'),
                                     bg='white', padx=15, pady=5)
         steps_frame.pack(fill='x', padx=15, pady=5)
 
@@ -385,11 +385,11 @@ class EducoderAutoCompleteApp:
 
             # 状态指示器
             status_circle = tk.Label(step_frame, text="",
-                                     font=('Microsoft YaHei', 12),
+                                     font=('微软雅黑', 12),
                                      bg='white', fg='#ccc')
             status_circle.pack(side='left')
 
-            tk.Label(step_frame, text=step, font=('Microsoft YaHei', 10),
+            tk.Label(step_frame, text=step, font=('微软雅黑', 10),
                      bg='white', anchor='w').pack(side='left', padx=10)
 
         # 操作按钮
@@ -397,7 +397,7 @@ class EducoderAutoCompleteApp:
         btn_frame.pack(fill='x', padx=15, pady=20)
 
         self.start_btn = tk.Button(btn_frame, text="▶ 立即启动",
-                                   font=('Microsoft YaHei', 11),
+                                   font=('微软雅黑', 11),
                                    bg=self.primary_color, fg='white',
                                    command=self.start_installation,
                                    padx=30, pady=10, relief='flat',
@@ -405,14 +405,14 @@ class EducoderAutoCompleteApp:
         self.start_btn.pack(fill='x', pady=5)
 
         self.toggle_tip_btn = tk.Button(btn_frame, text="📋 显示/隐藏安装步骤",
-                                        font=('Microsoft YaHei', 10),
+                                        font=('微软雅黑', 10),
                                         command=self.toggle_floating_tip,
                                         padx=20, pady=8,
                                         cursor='hand2')
         self.toggle_tip_btn.pack(fill='x', pady=5)
 
         self.manual_btn = tk.Button(btn_frame, text="📖 手动安装",
-                                    font=('Microsoft YaHei', 10),
+                                    font=('微软雅黑', 10),
                                     command=self.show_manual_guide,
                                     padx=20, pady=8,
                                     cursor='hand2')
@@ -420,13 +420,13 @@ class EducoderAutoCompleteApp:
 
         # 右侧输出面板
         output_frame = tk.LabelFrame(main_frame, text="安装日志",
-                                     font=('Microsoft YaHei', 11, 'bold'))
+                                     font=('微软雅黑', 11, 'bold'))
         output_frame.pack(side='right', fill='both', expand=True)
 
         # 输出文本框
         self.output_text = scrolledtext.ScrolledText(output_frame,
                                                      height=25,
-                                                     font=('Microsoft YaHei', 10),
+                                                     font=('微软雅黑', 10),
                                                      wrap=tk.WORD)
         self.output_text.pack(fill='both', expand=True, padx=10, pady=10)
 
@@ -439,7 +439,7 @@ class EducoderAutoCompleteApp:
         # 状态栏
         self.status_bar = tk.Label(self.root, text="就绪",
                                    bd=1, relief=tk.SUNKEN, anchor=tk.W,
-                                   font=('Microsoft YaHei', 9), bg='white')
+                                   font=('微软雅黑', 9), bg='white')
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
     def toggle_floating_tip(self):
@@ -770,10 +770,10 @@ class EducoderAutoCompleteApp:
 
         # 成功消息
         tk.Label(success_window, text="安装成功！",
-                 font=('Microsoft YaHei', 16, 'bold')).pack(pady=10)
+                 font=('微软雅黑', 16, 'bold')).pack(pady=10)
 
         tk.Label(success_window, text="拓展已成功安装，请在浏览器内打开头歌开始体验",
-                 font=('Microsoft YaHei', 10)).pack(pady=5)
+                 font=('微软雅黑', 10)).pack(pady=5)
 
         # 确定按钮
         tk.Button(success_window, text="确定",
@@ -805,13 +805,13 @@ class EducoderAutoCompleteApp:
 
         tk.Label(content_frame,
                  text="请选择您要安装扩展的浏览器：",
-                 font=('Microsoft YaHei', 12, 'bold'),
+                 font=('微软雅黑', 12, 'bold'),
                  bg='white').pack(pady=(0, 20))
 
         # 显示扩展目录
         tk.Label(content_frame,
                  text=f"扩展目录：\n{extension_dir}",
-                 font=('Microsoft YaHei', 9),
+                 font=('微软雅黑', 9),
                  bg='white',
                  fg='#666',
                  wraplength=350,
@@ -824,7 +824,7 @@ class EducoderAutoCompleteApp:
             command=lambda: self.open_chrome_install(browser_dialog, extension_dir),
             bg='#4285f4',
             fg='white',
-            font=('Microsoft YaHei', 11),
+            font=('微软雅黑', 11),
             width=20,
             height=2,
             relief='flat',
@@ -843,7 +843,7 @@ class EducoderAutoCompleteApp:
             command=lambda: self.open_edge_install(browser_dialog, extension_dir),
             bg='#0078d7',
             fg='white',
-            font=('Microsoft YaHei', 11),
+            font=('微软雅黑', 11),
             width=20,
             height=2,
             relief='flat',
@@ -862,7 +862,7 @@ class EducoderAutoCompleteApp:
         # 提示文本
         tk.Label(content_frame,
                  text="选择后将在浏览器中打开安装教程",
-                 font=('Microsoft YaHei', 10),
+                 font=('微软雅黑', 10),
                  bg='white',
                  fg='#666').pack(pady=(0, 10))
 
@@ -873,7 +873,7 @@ class EducoderAutoCompleteApp:
             command=browser_dialog.destroy,
             bg='#f5f5f5',
             fg='#333',
-            font=('Microsoft YaHei', 10),
+            font=('微软雅黑', 10),
             width=10,
             height=1,
             relief='flat',
