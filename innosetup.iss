@@ -3,7 +3,7 @@
 ; Non-commercial use only
 
 #define MyAppName "Educoder助手"
-#define MyAppVersion "0.1"
+#define MyAppVersion "1.0"
 #define MyAppPublisher "Sun Houyun"
 #define MyAppURL "https://yhsun.cn/educoder/"
 #define MyAppExeName "Educoder助手.exe"
@@ -35,12 +35,12 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 ChangesAssociations=yes
 DisableProgramGroupPage=yes
-LicenseFile=C:\Users\sunhouyun\Desktop\Educoder\EducoderAutoComplete\license.txt
+LicenseFile=C:\Users\sunhouyun\Desktop\Educoder\license.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
 OutputDir=C:\Users\sunhouyun\Desktop\Educoder\Output
 OutputBaseFilename=Setup
-; SetupIconFile=app.ico
+SetupIconFile=C:\Users\sunhouyun\Desktop\Educoder\app.ico
 SolidCompression=yes
 WizardStyle=modern
 
@@ -49,10 +49,10 @@ Name: "chinese"; MessagesFile: "compiler:Chinese.isl"
 
 [Files]
 Source: "C:\Users\sunhouyun\Desktop\Educoder\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\sunhouyun\Desktop\Educoder\dist\app.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\sunhouyun\Desktop\Educoder\app.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\sunhouyun\Desktop\Educoder\EducoderAutoComplete\app.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "C:\Users\sunhouyun\Desktop\Educoder\EducoderAutoComplete\chrome\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "C:\Users\sunhouyun\Desktop\Educoder\dist\app.png"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Users\sunhouyun\Desktop\Educoder\app.png"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Users\sunhouyun\Desktop\Educoder\EducoderAssistant\app.png"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\Users\sunhouyun\Desktop\Educoder\EducoderAssistant\chrome\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Registry]
