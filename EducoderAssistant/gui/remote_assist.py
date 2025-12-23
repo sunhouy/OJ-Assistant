@@ -687,7 +687,7 @@ class RemoteAssistDialog:
 
     def _send_image_url_to_server(self, file_url):
         """向服务器发送图片URL消息"""
-        message = f"发送图片，文件URL为{file_url}"
+        message = f"发送图片{file_url}"
         if self.client:
             # 使用客户端的安全发送方法
             self.client.send_message_threadsafe(message)
