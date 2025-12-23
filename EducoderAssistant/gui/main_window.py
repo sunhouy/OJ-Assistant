@@ -28,6 +28,7 @@ from utils.extension_setup import main as run_extension_setup
 
 class EducoderGUI:
     def __init__(self, root, username, token, machine_code=None, parent_window=None, current_version=None):
+        self.remote_assist_dialog = None
         self.root = root
         self.username = username
         self.token = token
@@ -1696,10 +1697,12 @@ class EducoderGUI:
                     return
                 except:
                     # 如果对话框已关闭，重新创建
-                    pass
+                    self.remote_assist_dialog = None
+
+            # 导入 RemoteAssistDialog
+            from gui.remote_assist import RemoteAssistDialog
 
             # 创建新的对话框
-            from gui.remote_assist import RemoteAssistDialog
             self.remote_assist_dialog = RemoteAssistDialog(self.root, self, self.config_manager)
 
         except Exception as e:
@@ -1716,14 +1719,9 @@ class EducoderGUI:
         if hasattr(self, 'is_closing') and self.is_closing:
             return
 
-        self.log("清理后台进程...")
-
-        # 停止服务器
-        self.stop_remote_assist_server()
-
         if self.server_manager:
             self.server_manager.stop()
-            time.sleep(0.5)  # 给服务器停止一点时间
+            time.sleep(0.1)  # 给服务器停止一点时间
 
         # 清理托盘图标
         if self.tray_icon:

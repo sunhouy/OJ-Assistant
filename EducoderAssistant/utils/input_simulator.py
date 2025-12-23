@@ -49,7 +49,7 @@ class InputSimulator:
             # 检查ESC键
             if self.esc_pressed:
                 self.gui.log("用户按下了ESC键，终止代码粘贴")
-                self._show_termination_message()
+                # self._show_termination_message()
                 keyboard.unhook_all()
                 return False
 
@@ -86,7 +86,7 @@ class InputSimulator:
                 # 检查ESC键
                 if self.esc_pressed:
                     self.gui.log("用户按下了ESC键，终止代码输入")
-                    self._show_termination_message()
+                    # self._show_termination_message()
                     keyboard.unhook_all()
                     return False
 
@@ -109,7 +109,7 @@ class InputSimulator:
                 # 检查ESC键
                 if self.esc_pressed:
                     self.gui.log("用户按下了ESC键，终止代码输入")
-                    self._show_termination_message()
+                    # self._show_termination_message()
                     keyboard.unhook_all()
                     return False
 
