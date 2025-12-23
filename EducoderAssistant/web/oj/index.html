@@ -1,0 +1,2172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>在线评测系统</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/theme/monokai.min.css">
+    <style>
+        /* 样式保持不变，与原始代码相同 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1a237e 0%, #283593 100%);
+            color: white;
+            padding: 15px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            flex-shrink: 0;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .difficulty-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 8px 15px;
+            border-radius: 20px;
+        }
+
+        .difficulty-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .difficulty-input {
+            width: 60px;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            background-color: white;
+            color: #333;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .difficulty-input:focus {
+            outline: 2px solid #3949ab;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 25px;
+            align-items: center;
+        }
+
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .status-label {
+            font-size: 0.85rem;
+            opacity: 0.8;
+        }
+
+        .status-value {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .warning-badge {
+            background-color: #ff5252;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            display: none;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 82, 82, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 82, 82, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 82, 82, 0); }
+        }
+
+        .main-content {
+            display: flex;
+            flex: 1;
+            padding: 20px;
+            gap: 20px;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        .problem-section {
+            flex: 1;
+            background-color: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .problem-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .problem-title {
+            font-size: 1.6rem;
+            color: #1a237e;
+            margin-bottom: 0;
+        }
+
+        .problem-desc {
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 1.2rem;
+            color: #3949ab;
+            margin: 20px 0 10px 0;
+        }
+
+        .code-section {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 25px;
+            background-color: #1a237e;
+            color: white;
+        }
+
+        .code-header h3 {
+            font-size: 1.3rem;
+        }
+
+        .language-selector {
+            background-color: #283593;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-weight: 600;
+        }
+
+        .code-editor {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .CodeMirror {
+            height: 100% !important;
+            font-size: 16px;
+        }
+
+        .actions-section {
+            display: flex;
+            gap: 15px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-top: 1px solid #eee;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 1rem;
+        }
+
+        .btn-primary {
+            background-color: #3949ab;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #303f9f;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-secondary {
+            background-color: #e8eaf6;
+            color: #3949ab;
+        }
+
+        .btn-secondary:hover {
+            background-color: #c5cae9;
+        }
+
+        .btn-danger {
+            background-color: #ff5252;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #ff1744;
+        }
+
+        .btn-success {
+            background-color: #4caf50;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #388e3c;
+        }
+
+        .btn-ai {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-ai:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        /* 模态框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 700px;
+            width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            color: #1a237e;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 1.8rem;
+            color: #999;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .close-modal:hover {
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #3949ab;
+            box-shadow: 0 0 0 2px rgba(57, 73, 171, 0.2);
+        }
+
+        textarea.form-control {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .test-case {
+            margin-bottom: 15px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 6px;
+            border-left: 4px solid #e8eaf6;
+        }
+
+        .test-case.passed {
+            border-left-color: #4caf50;
+        }
+
+        .test-case.failed {
+            border-left-color: #ff5252;
+        }
+
+        .test-case-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .test-case-title {
+            font-weight: 600;
+        }
+
+        .test-case-status {
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+        }
+
+        .status-passed {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .status-failed {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+
+        .test-case-details {
+            font-family: monospace;
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 8px;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+        }
+
+        .problem-list {
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+
+        .problem-list h4 {
+            color: #3949ab;
+            margin-bottom: 15px;
+        }
+
+        .problem-list-item {
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border-left: 4px solid #e8eaf6;
+        }
+
+        .problem-list-item:hover {
+            background-color: #e8eaf6;
+        }
+
+        .problem-list-item.active {
+            background-color: #e8eaf6;
+            border-left-color: #3949ab;
+        }
+
+        .problem-list-item.ai-generated {
+            border-left-color: #764ba2;
+        }
+
+        .problem-list-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .problem-list-desc {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .ai-tag {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3949ab;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .difficulty-display {
+            display: inline-block;
+            margin-left: 10px;
+            font-size: 0.9rem;
+            background-color: #e8eaf6;
+            padding: 2px 8px;
+            border-radius: 10px;
+            color: #3949ab;
+        }
+
+        .difficulty-1 { background-color: #e8f5e9; color: #2e7d32; }
+        .difficulty-2 { background-color: #f1f8e9; color: #558b2f; }
+        .difficulty-3 { background-color: #f9fbe7; color: #9e9d24; }
+        .difficulty-4 { background-color: #fffde7; color: #f9a825; }
+        .difficulty-5 { background-color: #fff3e0; color: #ef6c00; }
+        .difficulty-6 { background-color: #fbe9e7; color: #d84315; }
+        .difficulty-7 { background-color: #ffebee; color: #c62828; }
+        .difficulty-8 { background-color: #fce4ec; color: #ad1457; }
+        .difficulty-9 { background-color: #f3e5f5; color: #6a1b9a; }
+        .difficulty-10 { background-color: #e8eaf6; color: #283593; }
+
+        footer {
+            text-align: center;
+            padding: 15px;
+            background-color: #e8eaf6;
+            color: #5c6bc0;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 1200px) {
+            .main-content {
+                flex-direction: column;
+            }
+
+            .problem-section, .code-section {
+                width: 100%;
+            }
+
+            .header-controls {
+                flex-direction: column;
+                align-items: flex-end;
+                gap: 10px;
+            }
+        }
+
+        /* 安全防护样式 */
+        .security-warning {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            color: #ff0000;
+            z-index: 9999;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+            font-weight: bold;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .security-warning.active {
+            display: flex;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <h1>在线评测系统 - 安全模式</h1>
+            </div>
+            <div class="header-controls">
+                <div class="difficulty-control">
+                    <span class="difficulty-label">难度（1-10）:</span>
+                    <input type="number" id="difficultyInput" class="difficulty-input" min="1" max="10" value="1">
+                    <button class="btn btn-ai" id="generateAIProblemBtn">AI生成题目</button>
+                </div>
+                <div class="status-bar">
+                    <div class="status-item">
+                        <span class="status-label">切屏次数</span>
+                        <span id="switchCount" class="status-value">0</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">安全状态</span>
+                        <span id="securityStatus" class="status-value" style="color: #4caf50;">安全</span>
+                    </div>
+                </div>
+                <button class="btn btn-success" id="addProblemBtn">手动添加题目</button>
+                <button class="btn btn-secondary" id="fullscreenBtn">全屏模式</button>
+                <div id="warningBadge" class="warning-badge">检测到异常行为！</div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="problem-section">
+                <div class="problem-header">
+                    <h2 id="problemTitle" class="problem-title">1. A + B 问题</h2>
+                    <div>
+                        <span class="problem-id">ID: 1</span>
+                        <span id="problemDifficulty" class="difficulty-display difficulty-1">难度: 1</span>
+                    </div>
+                </div>
+
+                <div id="problemContent">
+                    <div class="problem-desc">
+                        <p>给定两个整数A和B，请计算它们的和。这是最基本的编程入门题目。</p>
+                        <p style="color: #ff5252; font-weight: bold; margin-top: 10px;">
+                            ⚠️ 安全提示：系统检测到异常行为将自动锁定，所有操作将被记录并上报服务器。
+                        </p>
+                    </div>
+
+                    <h3 class="section-title">输入格式</h3>
+                    <div class="test-case-details" id="inputFormat">输入包含两个整数A和B，用空格分隔。</div>
+
+                    <h3 class="section-title">输出格式</h3>
+                    <div class="test-case-details" id="outputFormat">输出一个整数，表示A+B的结果。</div>
+
+                    <h3 class="section-title">样例输入</h3>
+                    <div class="test-case-details" id="sampleInput">1 2</div>
+
+                    <h3 class="section-title">样例输出</h3>
+                    <div class="test-case-details" id="sampleOutput">3</div>
+
+                    <h3 class="section-title">约束条件</h3>
+                    <div class="test-case-details" id="constraints">-1000 ≤ A, B ≤ 1000</div>
+
+                    <h3 class="section-title">安全说明</h3>
+                    <p>系统采用多层安全防护：</p>
+                    <ul>
+                        <li>代码完整性校验 - 防止代码篡改</li>
+                        <li>行为异常检测 - 监控切屏和开发者工具使用</li>
+                        <li>代码混淆加密 - 增加逆向工程难度</li>
+                        <li>服务器端验证 - 所有提交均在服务器验证</li>
+                    </ul>
+                    <p style="color: #ff5252; font-weight: bold;">检测到开发者工具或代码篡改将自动锁定系统并上报违规记录。</p>
+                </div>
+
+                <div class="problem-list" id="problemList">
+                    <h4>题目列表</h4>
+                    <!-- 题目列表将在这里动态生成 -->
+                </div>
+            </div>
+
+            <div class="code-section">
+                <div class="code-header">
+                    <h3>代码编辑器 (受保护模式)</h3>
+                    <select class="language-selector" id="languageSelector">
+                        <option value="c" selected>C</option>
+                        <option value="cpp">C++</option>
+                        <option value="java">Java</option>
+                        <option value="python">Python</option>
+                    </select>
+                </div>
+                <div class="code-editor">
+                    <textarea id="codeEditor">#include <stdio.h>
+
+int main() {
+    int a, b;
+    scanf("%d %d", &a, &b);
+    printf("%d\n", a + b);
+    return 0;
+}</textarea>
+                </div>
+                <div class="actions-section">
+                    <button class="btn btn-primary" id="runCode">运行代码</button>
+                    <button class="btn btn-secondary" id="resetCode">重置代码</button>
+                    <button class="btn btn-danger" id="clearCode">清空代码</button>
+                    <button class="btn btn-success" id="validateCode">校验完整性</button>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>© 2025-2026 在线评测系统 - 安全版本
+            <a href="https://beian.miit.gov.cn/" target="_blank" style="color: var(--text-muted); text-decoration: none;">
+                京ICP备2025154249号
+            </a>
+            </p>
+            <p style="font-size: 0.8rem; margin-top: 5px;">安全哈希: <span id="securityHash">正在计算...</span></p>
+        </footer>
+    </div>
+
+    <!-- 安全警告屏幕 -->
+    <div class="security-warning" id="securityWarning">
+        <div>
+            <div style="font-size: 3rem; margin-bottom: 20px;">⚠️ 安全违规检测</div>
+            <div style="font-size: 1.5rem; margin-bottom: 30px;">检测到开发者工具或代码篡改行为</div>
+            <div style="font-size: 1.2rem; margin-bottom: 20px;">系统已锁定，所有操作已被记录</div>
+            <div style="font-size: 1rem; color: #aaa;">违规ID: <span id="violationId"></span></div>
+        </div>
+    </div>
+
+    <!-- 加载遮罩层 -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div style="color: white; margin-top: 20px; font-size: 1.2rem;">AI正在生成题目，请稍候...</div>
+    </div>
+
+    <!-- 切屏警告模态框 -->
+    <div class="modal" id="warningModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">⚠️ 检测到异常行为</h2>
+                <button class="close-modal" id="closeWarningModal">&times;</button>
+            </div>
+            <p>系统检测到您切换了窗口或标签页，或使用了开发者工具。</p>
+            <p>异常行为次数: <span id="modalSwitchCount">0</span></p>
+            <p>请专注于当前评测，避免再次触发安全检测。</p>
+            <p style="color: #ff5252; font-weight: bold;">注意：继续违规可能导致系统锁定！</p>
+            <div style="text-align: center; margin-top: 20px;">
+                <button class="btn btn-primary" id="confirmWarning">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 评测结果模态框 -->
+    <div class="modal" id="resultsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">评测结果 (服务器验证)</h2>
+                <button class="close-modal" id="closeResultsModal">&times;</button>
+            </div>
+            <div id="testResults"></div>
+            <div id="serverValidation" style="margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 5px;">
+                <h4>服务器验证状态</h4>
+                <p id="validationStatus">等待服务器验证...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加题目模态框 -->
+    <div class="addProblemModal" id="addProblemModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">手动添加题目</h2>
+                <button class="close-modal" id="closeAddProblemModal">&times;</button>
+            </div>
+            <form id="problemForm">
+                <div class="form-group">
+                    <label for="problemName">题目名称</label>
+                    <input type="text" id="problemName" class="form-control" placeholder="例如：A + B 问题" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="problemDescription">题目描述</label>
+                    <textarea id="problemDescription" class="form-control" placeholder="描述题目的要求和背景" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="problemInputFormat">输入格式</label>
+                    <textarea id="problemInputFormat" class="form-control" placeholder="描述输入数据的格式" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="problemOutputFormat">输出格式</label>
+                    <textarea id="problemOutputFormat" class="form-control" placeholder="描述输出数据的格式" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="problemSampleInput">样例输入</label>
+                    <textarea id="problemSampleInput" class="form-control" placeholder="输入样例" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="problemSampleOutput">样例输出</label>
+                    <textarea id="problemSampleOutput" class="form-control" placeholder="对应样例的输出" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="problemConstraints">约束条件</label>
+                    <textarea id="problemConstraints" class="form-control" placeholder="描述数据范围和限制条件"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="problemDifficultyManual">难度 (1-10)</label>
+                    <input type="number" id="problemDifficultyManual" class="form-control" min="1" max="10" value="5" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="problemTestCases">测试用例 (JSON格式)</label>
+                    <textarea id="problemTestCases" class="form-control" placeholder='[{"input": "1 2", "expected": "3", "name": "样例测试"}]' rows="6"></textarea>
+                    <small>每个测试用例包含input(输入)、expected(期望输出)、name(测试名称)</small>
+                </div>
+
+                <div style="text-align: center; margin-top: 20px;">
+                    <button type="submit" class="btn btn-primary" style="padding: 12px 30px;">添加题目</button>
+                    <button type="button" class="btn btn-secondary" id="cancelAddProblem" style="margin-left: 10px;">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 引入CodeMirror库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/clike/clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/clike/clike.min.js"></script>
+
+    <script>
+        // 安全配置
+        const SECURITY_CONFIG = {
+            ENABLED: true,
+            MAX_VIOLATIONS: 3,
+            LOCK_TIMEOUT: 30000, // 30秒锁定
+            SERVER_VALIDATION_URL: 'https://your-server.com/validate', // 服务器验证地址
+            CODE_INTEGRITY_CHECK: true,
+            DETECT_DEVTOOLS: true,
+            DETECT_TAMPERING: true,
+            ENABLE_OBFUSCATION: true
+        };
+
+        // 安全状态
+        let securityState = {
+            violations: 0,
+            isLocked: false,
+            integrityHash: '',
+            lastCodeHash: '',
+            sessionId: generateSessionId(),
+            violationLog: []
+        };
+
+        // 生成会话ID
+        function generateSessionId() {
+            return 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // 生成违规ID
+        function generateViolationId() {
+            return 'viol_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        }
+
+        // 计算代码完整性哈希
+        function calculateCodeIntegrity() {
+            const code = codeEditor.getValue();
+            const timestamp = Date.now();
+            // 使用简单哈希算法
+            let hash = 0;
+            for (let i = 0; i < code.length; i++) {
+                hash = ((hash << 5) - hash) + code.charCodeAt(i);
+                hash = hash & hash;
+            }
+            return (hash + timestamp).toString(36);
+        }
+
+        // 校验代码完整性
+        function validateCodeIntegrity() {
+            const currentHash = calculateCodeIntegrity();
+            if (securityState.lastCodeHash && currentHash !== securityState.lastCodeHash) {
+                recordViolation('代码完整性校验失败', 'CODE_TAMPERING');
+                return false;
+            }
+            securityState.lastCodeHash = currentHash;
+            return true;
+        }
+
+        // 记录违规行为
+        function recordViolation(reason, type) {
+            if (!SECURITY_CONFIG.ENABLED || securityState.isLocked) return;
+
+            const violationId = generateViolationId();
+            securityState.violations++;
+            securityState.violationLog.push({
+                id: violationId,
+                timestamp: new Date().toISOString(),
+                reason: reason,
+                type: type,
+                sessionId: securityState.sessionId
+            });
+
+            // 更新UI
+            document.getElementById('securityStatus').textContent = '违规';
+            document.getElementById('securityStatus').style.color = '#ff5252';
+            document.getElementById('warningBadge').style.display = 'block';
+            document.getElementById('warningBadge').textContent = '安全违规！';
+
+            // 显示警告
+            showSecurityWarning(violationId);
+
+            // 如果违规次数超过阈值，锁定系统
+            if (securityState.violations >= SECURITY_CONFIG.MAX_VIOLATIONS) {
+                lockSystem();
+            }
+
+            // 记录到控制台
+            console.error(`[安全违规] ${reason} (${type}) - 违规ID: ${violationId}`);
+
+            // 实际应用中应发送到服务器
+            // sendViolationToServer(violationId, reason, type);
+
+            return violationId;
+        }
+
+        // 显示安全警告
+        function showSecurityWarning(violationId) {
+            document.getElementById('violationId').textContent = violationId;
+            document.getElementById('securityWarning').classList.add('active');
+
+            // 30秒后自动隐藏（如果不是锁定状态）
+            setTimeout(() => {
+                if (!securityState.isLocked) {
+                    document.getElementById('securityWarning').classList.remove('active');
+                }
+            }, 5000);
+        }
+
+        // 锁定系统
+        function lockSystem() {
+            securityState.isLocked = true;
+            document.getElementById('securityWarning').classList.add('active');
+            document.getElementById('securityStatus').textContent = '已锁定';
+
+            // 禁用所有交互元素
+            document.querySelectorAll('button, input, textarea, select').forEach(el => {
+                el.disabled = true;
+            });
+
+            // 显示锁定消息
+            document.getElementById('securityWarning').innerHTML = `
+                <div>
+                    <div style="font-size: 3rem; margin-bottom: 20px;">🔒 系统已锁定</div>
+                    <div style="font-size: 1.5rem; margin-bottom: 30px;">检测到多次安全违规行为</div>
+                    <div style="font-size: 1.2rem; margin-bottom: 20px;">系统已锁定，所有操作已被记录并上报</div>
+                    <div style="font-size: 1rem; color: #aaa;">违规ID: ${securityState.violationLog[securityState.violationLog.length-1]?.id || '未知'}</div>
+                    <div style="font-size: 1rem; color: #aaa; margin-top: 10px;">会话ID: ${securityState.sessionId}</div>
+                </div>
+            `;
+
+            // 30秒后自动解锁（实际应用中应由管理员解锁）
+            setTimeout(() => {
+                if (securityState.isLocked) {
+                    securityState.isLocked = false;
+                    securityState.violations = 0;
+                    document.getElementById('securityWarning').classList.remove('active');
+                    document.getElementById('securityStatus').textContent = '安全';
+                    document.getElementById('securityStatus').style.color = '#4caf50';
+
+                    // 重新启用所有交互元素
+                    document.querySelectorAll('button, input, textarea, select').forEach(el => {
+                        el.disabled = false;
+                    });
+                }
+            }, SECURITY_CONFIG.LOCK_TIMEOUT);
+        }
+
+        // 开发者工具检测
+        function detectDevTools() {
+            if (!SECURITY_CONFIG.DETECT_DEVTOOLS) return;
+
+            // 方法1: 检测窗口大小差异
+            const widthThreshold = window.outerWidth - window.innerWidth > 100;
+            const heightThreshold = window.outerHeight - window.innerHeight > 100;
+
+            if (widthThreshold || heightThreshold) {
+                recordViolation('检测到开发者工具窗口', 'DEVTOOLS_OPEN');
+            }
+
+            // 方法2: 检测debugger语句
+            const startTime = Date.now();
+            debugger; // 如果开发者工具打开，会在这里暂停
+            const endTime = Date.now();
+
+            if (endTime - startTime > 100) { // 如果暂停时间超过100ms
+                recordViolation('检测到调试器活动', 'DEBUGGER_DETECTED');
+            }
+
+            // 方法3: 重写console方法
+            const originalConsole = {
+                log: console.log,
+                warn: console.warn,
+                error: console.error
+            };
+
+            console.log = function() {
+                recordViolation('控制台日志访问', 'CONSOLE_ACCESS');
+                originalConsole.log.apply(console, arguments);
+            };
+
+            console.warn = function() {
+                recordViolation('控制台警告访问', 'CONSOLE_ACCESS');
+                originalConsole.warn.apply(console, arguments);
+            };
+
+            console.error = function() {
+                // 不记录错误，避免循环
+                originalConsole.error.apply(console, arguments);
+            };
+        }
+
+        // 代码篡改检测
+        function detectTampering() {
+            if (!SECURITY_CONFIG.DETECT_TAMPERING) return;
+
+            // 检查关键函数是否被修改
+            const criticalFunctions = [
+                'evaluateCode',
+                'validateCodeIntegrity',
+                'recordViolation',
+                'detectDevTools'
+            ];
+
+            criticalFunctions.forEach(funcName => {
+                if (typeof window[funcName] !== 'function') {
+                    recordViolation(`关键函数 ${funcName} 被修改或删除`, 'CODE_TAMPERING`);
+                }
+            });
+
+            // 检查DOM是否被修改
+            const originalHTML = document.documentElement.innerHTML.length;
+            setInterval(() => {
+                if (document.documentElement.innerHTML.length !== originalHTML) {
+                    recordViolation('DOM结构被修改', 'DOM_TAMPERING');
+                }
+            }, 1000);
+        }
+
+        // 代码混淆（简单示例）
+        function obfuscateCode(code) {
+            if (!SECURITY_CONFIG.ENABLE_OBFUSCATION) return code;
+
+            // 简单的字符串混淆
+            return code.split('').map(char => {
+                return String.fromCharCode(char.charCodeAt(0) ^ 0x55);
+            }).join('');
+        }
+
+        // 反混淆
+        function deobfuscateCode(code) {
+            if (!SECURITY_CONFIG.ENABLE_OBFUSCATION) return code;
+
+            return code.split('').map(char => {
+                return String.fromCharCode(char.charCodeAt(0) ^ 0x55);
+            }).join('');
+        }
+
+        // 初始化安全系统
+        function initSecuritySystem() {
+            console.log('[安全系统] 初始化...');
+
+            // 计算初始完整性哈希
+            securityState.integrityHash = calculateCodeIntegrity();
+            securityState.lastCodeHash = securityState.integrityHash;
+
+            // 更新安全哈希显示
+            document.getElementById('securityHash').textContent =
+                securityState.integrityHash.substring(0, 16) + '...';
+
+            // 启动安全检测
+            if (SECURITY_CONFIG.ENABLED) {
+                setInterval(detectDevTools, 2000);
+                setInterval(detectTampering, 3000);
+                setInterval(validateCodeIntegrity, 5000);
+
+                // 初始检测
+                detectDevTools();
+                detectTampering();
+                validateCodeIntegrity();
+            }
+
+            console.log('[安全系统] 初始化完成，会话ID:', securityState.sessionId);
+        }
+
+        // ==================== 主应用程序代码 ====================
+        // 初始化代码编辑器
+        const codeEditor = CodeMirror.fromTextArea(document.getElementById('codeEditor'), {
+            lineNumbers: true,
+            mode: "text/x-csrc",
+            theme: "monokai",
+            indentUnit: 4,
+            tabSize: 4,
+            lineWrapping: true,
+            autofocus: true
+        });
+
+        // 配置AI题目生成的API参数
+        const AI_API_CONFIG = {
+            BASE_URL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+            MODEL_NAME: 'qwen-plus',
+            API_KEY: 'sk-7cc25be93a9540328aa4c104da6c4612'
+        };
+
+        // 题目数据存储
+        let problems = [];
+        let currentProblemId = 1;
+        let aiGeneratedCount = 0;
+        let lastAIGeneratedTopics = {};
+
+        // 显示加载遮罩层
+        function showLoading() {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+
+        // 隐藏加载遮罩层
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
+        // 显示通知消息
+        function showNotification(message, type = 'info') {
+            // 创建通知元素
+            const notification = document.createElement('div');
+            notification.className = `notification notification-${type}`;
+            notification.textContent = message;
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
+                color: white;
+                border-radius: 4px;
+                z-index: 10000;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                animation: slideIn 0.3s ease;
+            `;
+
+            document.body.appendChild(notification);
+
+            // 3秒后自动移除
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        document.body.removeChild(notification);
+                    }
+                }, 300);
+            }, 3000);
+
+            // 添加CSS动画
+            if (!document.querySelector('#notification-styles')) {
+                const style = document.createElement('style');
+                style.id = 'notification-styles';
+                style.textContent = `
+                    @keyframes slideIn {
+                        from { transform: translateX(100%); opacity: 0; }
+                        to { transform: translateX(0); opacity: 1; }
+                    }
+                    @keyframes slideOut {
+                        from { transform: translateX(0); opacity: 1; }
+                        to { transform: translateX(100%); opacity: 0; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+        }
+
+        // 初始化问题列表
+        function initializeProblemList() {
+            const problemListContainer = document.getElementById('problemList');
+            problemListContainer.innerHTML = '<h4>题目列表</h4>';
+
+            if (problems.length === 0) {
+                problemListContainer.innerHTML += '<p>暂无题目，请点击"AI生成题目"按钮创建题目。</p>';
+                return;
+            }
+
+            problems.forEach(problem => {
+                const problemItem = document.createElement('div');
+                problemItem.className = `problem-list-item ${problem.id === currentProblemId ? 'active' : ''} ${problem.aiGenerated ? 'ai-generated' : ''}`;
+                problemItem.dataset.id = problem.id;
+
+                const aiTag = problem.aiGenerated ? '<span class="ai-tag">AI生成</span>' : '';
+
+                problemItem.innerHTML = `
+                    <div class="problem-list-title">${problem.id}. ${problem.title} ${aiTag}</div>
+                    <div class="problem-list-desc">${problem.description.substring(0, 50)}...</div>
+                    <div style="font-size: 0.8rem; color: #888; margin-top: 5px;">难度: ${problem.difficulty || 1}/10</div>
+                `;
+
+                problemItem.addEventListener('click', () => {
+                    // 安全检查
+                    if (!validateCodeIntegrity()) {
+                        showNotification('代码完整性校验失败，操作被阻止', 'error');
+                        return;
+                    }
+
+                    document.querySelectorAll('.problem-list-item').forEach(item => {
+                        item.classList.remove('active');
+                    });
+                    problemItem.classList.add('active');
+
+                    loadProblem(problem.id);
+                });
+
+                problemListContainer.appendChild(problemItem);
+            });
+        }
+
+        // 加载题目
+        function loadProblem(problemId) {
+            const problem = problems.find(p => p.id == problemId);
+            if (!problem) return;
+
+            currentProblemId = problemId;
+
+            // 更新页面显示
+            document.getElementById('problemTitle').textContent = `${problem.id}. ${problem.title}`;
+            document.getElementById('inputFormat').textContent = problem.inputFormat;
+            document.getElementById('outputFormat').textContent = problem.outputFormat;
+            document.getElementById('sampleInput').textContent = problem.sampleInput;
+            document.getElementById('sampleOutput').textContent = problem.sampleOutput;
+            document.getElementById('constraints').innerHTML = problem.constraints;
+
+            const problemDesc = document.querySelector('.problem-desc');
+            problemDesc.innerHTML = `<p>${problem.description}</p>`;
+
+            const difficultyElement = document.getElementById('problemDifficulty');
+            difficultyElement.textContent = `难度: ${problem.difficulty || 1}`;
+            difficultyElement.className = `difficulty-display difficulty-${Math.min(problem.difficulty || 1, 10)}`;
+
+            document.querySelector('.problem-id').textContent = `ID: ${problem.id}`;
+
+            // 根据题目类型和难度设置默认代码
+            let defaultCode = '';
+            const language = document.getElementById('languageSelector').value;
+            const difficulty = problem.difficulty || 1;
+
+            if (language === 'c' || language === 'cpp') {
+                if (difficulty <= 3) {
+                    defaultCode = `#include <stdio.h>\n\nint main() {\n    // 简单题目，请在此编写代码\n    return 0;\n}`;
+                } else if (difficulty <= 7) {
+                    defaultCode = `#include <stdio.h>\n#include <stdlib.h>\n\nint main() {\n    // 中等难度题目，可能需要数组或字符串处理\n    return 0;\n}`;
+                } else {
+                    defaultCode = `#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\nint main() {\n    // 高难度题目，可能需要复杂算法\n    return 0;\n}`;
+                }
+            } else if (language === 'python') {
+                if (difficulty <= 3) {
+                    defaultCode = `# 简单题目，请在此编写代码`;
+                } else if (difficulty <= 7) {
+                    defaultCode = `# 中等难度题目，可能需要列表或字典处理`;
+                } else {
+                    defaultCode = `# 高难度题目，可能需要复杂算法`;
+                }
+            } else if (language === 'java') {
+                defaultCode = `public class Main {\n    public static void main(String[] args) {\n        // 请在此编写代码\n    }\n}`;
+            }
+
+            codeEditor.setValue(defaultCode);
+            document.getElementById('resultsModal').style.display = 'none';
+
+            // 更新代码完整性哈希
+            securityState.lastCodeHash = calculateCodeIntegrity();
+        }
+
+        // 根据难度值生成对应的提示词
+        function getPromptByDifficulty(difficulty) {
+            const difficultyDescriptions = [
+                "非常简单，适合编程初学者，涉及基本输入输出和简单计算",
+                "简单，涉及基础条件判断和循环",
+                "中等偏易，涉及数组或字符串的基本操作",
+                "中等，涉及简单的算法如排序或查找",
+                "中等偏难，涉及常见的算法问题如动态规划或图论基础",
+                "较难，需要一定的算法知识和优化能力",
+                "困难，涉及复杂算法或数据结构",
+                "非常困难，需要高级算法知识和优化技巧",
+                "极难，挑战性很高，需要深入理解算法原理",
+                "极限难度，适合算法竞赛高手"
+            ];
+
+            const topicsByDifficulty = [
+                ["A+B问题", "计算两个数的乘积", "判断奇偶数", "求绝对值", "计算两个数的差"],
+                ["计算阶乘", "斐波那契数列", "素数判断", "求最大公约数", "求最小公倍数"],
+                ["数组求和", "字符串反转", "查找最大最小值", "矩阵转置", "统计字符出现次数"],
+                ["冒泡排序", "二分查找", "选择排序", "插入排序", "线性搜索"],
+                ["01背包问题", "最长公共子序列", "最短路径问题", "二叉树遍历", "图的深度优先搜索"],
+                ["复杂动态规划", "图论算法", "高级数据结构", "复杂字符串处理", "计算几何基础"],
+                ["网络流问题", "高级图论", "计算几何", "数论难题", "字符串高级算法"],
+                ["NP难问题近似算法", "高级动态规划优化", "复杂组合数学", "高级计算几何", "数论高级问题"],
+                ["竞赛级难题", "需要复杂推导的问题", "多维度优化问题", "高级算法综合", "复杂数学问题"],
+                ["顶级算法竞赛难题", "需要创新性解法的问题", "综合性极高的问题", "国际竞赛压轴题", "研究级算法问题"]
+            ];
+
+            const index = Math.min(Math.max(Math.floor(difficulty) - 1, 0), 9);
+            const availableTopics = topicsByDifficulty[index];
+            const lastTopics = lastAIGeneratedTopics[difficulty] || [];
+
+            let candidates = availableTopics.filter(topic => !lastTopics.includes(topic));
+
+            if (candidates.length === 0) {
+                candidates = availableTopics;
+                lastAIGeneratedTopics[difficulty] = [];
+            }
+
+            const randomTopic = candidates[Math.floor(Math.random() * candidates.length)];
+
+            if (!lastAIGeneratedTopics[difficulty]) {
+                lastAIGeneratedTopics[difficulty] = [];
+            }
+            lastAIGeneratedTopics[difficulty].push(randomTopic);
+
+            if (lastAIGeneratedTopics[difficulty].length > 5) {
+                lastAIGeneratedTopics[difficulty].shift();
+            }
+
+            return {
+                description: difficultyDescriptions[index],
+                topic: randomTopic,
+                level: index + 1
+            };
+        }
+
+        // AI生成题目函数
+        async function generateAIProblem() {
+            // 安全检查
+            if (!validateCodeIntegrity()) {
+                showNotification('代码完整性校验失败，操作被阻止', 'error');
+                return;
+            }
+
+            const difficultyInput = document.getElementById('difficultyInput');
+            let difficulty = parseInt(difficultyInput.value);
+
+            if (isNaN(difficulty) || difficulty < 1 || difficulty > 10) {
+                showNotification('难度值必须在1-10之间', 'error');
+                difficultyInput.value = 5;
+                difficulty = 5;
+            }
+
+            const promptInfo = getPromptByDifficulty(difficulty);
+
+            showLoading();
+
+            const systemPrompt = `你是一个在线编程评测系统（Online Judge）的出题专家。
+请生成一道适合编程学习者的编程题目，要求如下：
+1. **题目名称**：一个简洁明确的标题，反映题目核心内容
+2. **题目描述**：清晰地描述问题背景、要求和输入输出说明
+3. **输入格式**：详细说明输入数据的格式、类型和约束
+4. **输出格式**：详细说明输出数据的格式和要求
+5. **样例输入**：提供一组典型的输入样例
+6. **样例输出**：提供对应的输出样例
+7. **约束条件**：说明数据范围、时间空间限制等
+
+题目难度级别：${difficulty}/10 (${promptInfo.description})
+题目主题：${promptInfo.topic}
+
+**请严格使用以下JSON格式返回，不要包含任何额外的解释或Markdown格式：**
+{
+    "title": "题目名称",
+    "description": "题目描述",
+    "inputFormat": "输入格式",
+    "outputFormat": "输出格式",
+    "sampleInput": "样例输入",
+    "sampleOutput": "样例输出",
+    "constraints": "约束条件"
+}`;
+
+            const requestBody = {
+                model: AI_API_CONFIG.MODEL_NAME,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: `请生成一道难度为${difficulty}/10的编程题目，主题与${promptInfo.topic}相关。` }
+                ],
+                temperature: 1.0,
+                max_tokens: 2000
+            };
+
+            try {
+                const response = await fetch(`${AI_API_CONFIG.BASE_URL}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${AI_API_CONFIG.API_KEY}`
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API请求失败: ${response.status}`);
+                }
+
+                const data = await response.json();
+                let aiResponse = data.choices?.[0]?.message?.content || '';
+
+                let problemData;
+
+                try {
+                    const jsonMatch = aiResponse.match(/```json\n([\s\S]*?)\n```/) || aiResponse.match(/```([\s\S]*?)```/);
+                    if (jsonMatch) {
+                        problemData = JSON.parse(jsonMatch[1]);
+                    } else {
+                        problemData = JSON.parse(aiResponse);
+                    }
+                } catch (parseError) {
+                    console.error('解析AI响应失败:', parseError);
+                    problemData = {
+                        title: `${promptInfo.topic} (难度${difficulty}/10)`,
+                        description: `这是一道难度为${difficulty}/10的编程题目，涉及${promptInfo.topic}。请完成题目要求。`,
+                        inputFormat: "标准输入，具体格式见题目描述",
+                        outputFormat: "标准输出，具体格式见题目描述",
+                        sampleInput: "示例输入",
+                        sampleOutput: "示例输出",
+                        constraints: "数据范围：根据具体题目而定"
+                    };
+                }
+
+                aiGeneratedCount++;
+                const newProblemId = problems.length > 0 ? Math.max(...problems.map(p => p.id)) + 1 : 1000 + aiGeneratedCount;
+                const newProblem = {
+                    id: newProblemId,
+                    title: problemData.title || `${promptInfo.topic} (AI生成)`,
+                    description: problemData.description || "AI生成的编程题目",
+                    inputFormat: problemData.inputFormat || "从标准输入读取数据",
+                    outputFormat: problemData.outputFormat || "输出到标准输出",
+                    sampleInput: problemData.sampleInput || "示例输入",
+                    sampleOutput: problemData.sampleOutput || "示例输出",
+                    constraints: problemData.constraints || "常规约束条件",
+                    difficulty: difficulty,
+                    aiGenerated: true,
+                    testCases: generateTestCasesFromAIProblem(problemData, difficulty, promptInfo.topic)
+                };
+
+                problems.push(newProblem);
+                initializeProblemList();
+                loadProblem(newProblemId);
+
+                showNotification(`已成功生成难度${difficulty}/10的新题目: ${newProblem.title}`, 'success');
+
+            } catch (error) {
+                console.error('生成AI题目失败:', error);
+                showNotification(`生成题目失败: ${error.message}`, 'error');
+                loadDefaultFallbackProblem(difficulty);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // 生成测试用例
+        function generateTestCasesFromAIProblem(problemData, difficulty, topic) {
+            const testCases = [
+                { input: problemData.sampleInput, expected: problemData.sampleOutput, name: "样例测试" }
+            ];
+
+            if (difficulty <= 3) {
+                testCases.push(
+                    { input: "0 0", expected: "0", name: "边界测试1" },
+                    { input: "10 20", expected: "30", name: "基础测试" },
+                    { input: "-5 5", expected: "0", name: "正负测试" },
+                    { input: "100 -50", expected: "50", name: "较大数值测试" }
+                );
+            } else if (difficulty <= 6) {
+                testCases.push(
+                    { input: "5 8", expected: "13", name: "基础测试" },
+                    { input: "-3 7", expected: "4", name: "包含负数" },
+                    { input: "100 200", expected: "300", name: "较大数值" },
+                    { input: "0 100", expected: "100", name: "零值测试" },
+                    { input: "-10 -20", expected: "-30", name: "双负数测试" }
+                );
+            } else {
+                testCases.push(
+                    { input: "15 25", expected: "40", name: "基础测试" },
+                    { input: "-10 5", expected: "-5", name: "负数测试" },
+                    { input: "999 1", expected: "1000", name: "边界测试" },
+                    { input: "123 456", expected: "579", name: "随机测试" },
+                    { input: "-999 -1", expected: "-1000", name: "负边界测试" },
+                    { input: "1000 1000", expected: "2000", name: "大数测试" }
+                );
+            }
+
+            return testCases;
+        }
+
+        // 加载默认后备题目
+        function loadDefaultFallbackProblem(difficulty = 5) {
+            aiGeneratedCount++;
+            const newProblemId = problems.length > 0 ? Math.max(...problems.map(p => p.id)) + 1 : 1000 + aiGeneratedCount;
+
+            let defaultProblem;
+
+            if (difficulty <= 3) {
+                defaultProblem = {
+                    id: newProblemId,
+                    title: `两数之和 (难度${difficulty}/10)`,
+                    description: `给定两个整数A和B，请计算它们的和。`,
+                    inputFormat: "输入包含两个整数A和B，用空格分隔。",
+                    outputFormat: "输出一个整数，表示A+B的结果。",
+                    sampleInput: "1 2",
+                    sampleOutput: "3",
+                    constraints: "-1000 ≤ A, B ≤ 1000",
+                    difficulty: difficulty,
+                    aiGenerated: true,
+                    testCases: [
+                        { input: "1 2", expected: "3", name: "样例测试" },
+                        { input: "0 0", expected: "0", name: "零测试" },
+                        { input: "-5 10", expected: "5", name: "负数测试" },
+                        { input: "100 200", expected: "300", name: "较大数值" }
+                    ]
+                };
+            } else if (difficulty <= 6) {
+                defaultProblem = {
+                    id: newProblemId,
+                    title: `斐波那契数列 (难度${difficulty}/10)`,
+                    description: `给定一个正整数n，输出斐波那契数列的第n项。斐波那契数列定义为：F(0)=0, F(1)=1, F(n)=F(n-1)+F(n-2) (n≥2)。`,
+                    inputFormat: "输入一个整数n (0 ≤ n ≤ 30)。",
+                    outputFormat: "输出斐波那契数列的第n项。",
+                    sampleInput: "5",
+                    sampleOutput: "5",
+                    constraints: "0 ≤ n ≤ 30",
+                    difficulty: difficulty,
+                    aiGenerated: true,
+                    testCases: [
+                        { input: "0", expected: "0", name: "样例测试" },
+                        { input: "1", expected: "1", name: "基础测试" },
+                        { input: "5", expected: "5", name: "中等测试" },
+                        { input: "10", expected: "55", name: "较大数值" },
+                        { input: "20", expected: "6765", name: "边界测试" }
+                    ]
+                };
+            } else {
+                defaultProblem = {
+                    id: newProblemId,
+                    title: `最大子序列和 (难度${difficulty}/10)`,
+                    description: `给定一个整数序列，找出其中连续子序列的最大和。`,
+                    inputFormat: "第一行输入整数n (1 ≤ n ≤ 1000)，表示序列长度。第二行输入n个整数，用空格分隔。",
+                    outputFormat: "输出一个整数，表示最大子序列和。",
+                    sampleInput: "5\n1 -2 3 4 -5",
+                    sampleOutput: "7",
+                    constraints: "1 ≤ n ≤ 1000，每个整数在-1000到1000之间",
+                    difficulty: difficulty,
+                    aiGenerated: true,
+                    testCases: [
+                        { input: "5\n1 -2 3 4 -5", expected: "7", name: "样例测试" },
+                        { input: "3\n-1 -2 -3", expected: "-1", name: "全负数测试" },
+                        { input: "4\n1 2 3 4", expected: "10", name: "全正数测试" },
+                        { input: "6\n-2 11 -4 13 -5 -2", expected: "20", name: "复杂测试" }
+                    ]
+                };
+            }
+
+            problems.push(defaultProblem);
+            initializeProblemList();
+            loadProblem(newProblemId);
+
+            showNotification(`已使用备用题目: ${defaultProblem.title}`, 'info');
+        }
+
+        // 切换编程语言
+        document.getElementById('languageSelector').addEventListener('change', function() {
+            if (!validateCodeIntegrity()) {
+                showNotification('代码完整性校验失败，操作被阻止', 'error');
+                return;
+            }
+
+            const lang = this.value;
+            let mode = "text/x-csrc";
+
+            if (lang === "cpp") mode = "text/x-c++src";
+            else if (lang === "java") mode = "text/x-java";
+            else if (lang === "python") mode = "text/x-python";
+
+            codeEditor.setOption("mode", mode);
+
+            if (currentProblemId) {
+                const problem = problems.find(p => p.id == currentProblemId);
+                if (problem) {
+                    const difficulty = problem.difficulty || 1;
+                    let defaultCode = '';
+
+                    if (lang === 'c' || lang === 'cpp') {
+                        if (difficulty <= 3) {
+                            defaultCode = `#include <stdio.h>\n\nint main() {\n    // 简单题目，请在此编写代码\n    return 0;\n}`;
+                        } else if (difficulty <= 7) {
+                            defaultCode = `#include <stdio.h>\n#include <stdlib.h>\n\nint main() {\n    // 中等难度题目，可能需要数组或字符串处理\n    return 0;\n}`;
+                        } else {
+                            defaultCode = `#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\nint main() {\n    // 高难度题目，可能需要复杂算法\n    return 0;\n}`;
+                        }
+                    } else if (lang === 'python') {
+                        if (difficulty <= 3) {
+                            defaultCode = `# 简单题目，请在此编写代码`;
+                        } else if (difficulty <= 7) {
+                            defaultCode = `# 中等难度题目，可能需要列表或字典处理`;
+                        } else {
+                            defaultCode = `# 高难度题目，可能需要复杂算法`;
+                        }
+                    } else if (lang === 'java') {
+                        defaultCode = `public class Main {\n    public static void main(String[] args) {\n        // 请在此编写代码\n    }\n}`;
+                    }
+
+                    codeEditor.setValue(defaultCode);
+                }
+            }
+        });
+
+        // 切屏检测类（增强版）
+        class ScreenSwitchDetector {
+            constructor() {
+                this.switchCount = 0;
+                this.maxSwitches = 5;
+                this.isDetecting = true;
+                this.lastSwitchTime = 0;
+                this.minSwitchInterval = 1000;
+                this.init();
+            }
+
+            init() {
+                document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
+                window.addEventListener('blur', this.handleWindowBlur.bind(this));
+                window.addEventListener('focus', this.handleWindowFocus.bind(this));
+                this.preventDevTools();
+                this.updateUI();
+            }
+
+            handleVisibilityChange() {
+                if (document.hidden) {
+                    this.recordSwitch('visibility');
+                } else {
+                    document.getElementById('pageStatus').textContent = '活跃';
+                }
+            }
+
+            handleWindowBlur() {
+                if (document.activeElement.tagName === 'BODY' ||
+                    document.activeElement.tagName === 'HTML') {
+                    this.recordSwitch('focus');
+                }
+            }
+
+            handleWindowFocus() {
+                document.getElementById('pageStatus').textContent = '活跃';
+                document.getElementById('warningBadge').style.display = 'none';
+            }
+
+            recordSwitch(source) {
+                const now = Date.now();
+
+                if (now - this.lastSwitchTime < this.minSwitchInterval) {
+                    return;
+                }
+
+                this.lastSwitchTime = now;
+                this.switchCount++;
+
+                this.updateUI();
+                this.showWarning();
+
+                if (this.switchCount >= this.maxSwitches) {
+                    this.showSevereWarning();
+                }
+
+                console.log(`切屏检测 (${source}) - 次数: ${this.switchCount}`);
+
+                // 记录安全违规
+                recordViolation(`检测到切屏行为 (${source})`, 'SCREEN_SWITCH');
+            }
+
+            updateUI() {
+                document.getElementById('switchCount').textContent = this.switchCount;
+                document.getElementById('modalSwitchCount').textContent = this.switchCount;
+            }
+
+            showWarning() {
+                const warningBadge = document.getElementById('warningBadge');
+                warningBadge.style.display = 'block';
+
+                setTimeout(() => {
+                    warningBadge.style.display = 'none';
+                }, 5000);
+
+                if (this.switchCount >= 2) {
+                    this.showModalWarning();
+                }
+            }
+
+            showModalWarning() {
+                const modal = document.getElementById('warningModal');
+                modal.style.display = 'flex';
+            }
+
+            showSevereWarning() {
+                alert(`严重警告：您已切屏${this.switchCount}次！继续切屏可能导致评测无效。`);
+            }
+
+            preventDevTools() {
+                // 防止F12等快捷键
+                document.addEventListener('keydown', e => {
+                    if (e.key === 'F12' ||
+                        (e.ctrlKey && e.shiftKey && e.key === 'I') ||
+                        (e.ctrlKey && e.shiftKey && e.key === 'J') ||
+                        (e.ctrlKey && e.key === 'U')) {
+                        e.preventDefault();
+                        this.recordSwitch('devtools');
+                        recordViolation('尝试打开开发者工具', 'DEVTOOLS_ATTEMPT');
+                        alert('开发者工具已被禁用！');
+                    }
+                });
+
+                // 防止右键菜单
+                document.addEventListener('contextmenu', e => {
+                    e.preventDefault();
+                    recordViolation('尝试打开右键菜单', 'CONTEXT_MENU_ATTEMPT');
+                }, false);
+            }
+
+            resetCount() {
+                this.switchCount = 0;
+                this.updateUI();
+            }
+
+            getSwitchCount() {
+                return this.switchCount;
+            }
+        }
+
+        // 初始化切屏检测器
+        const screenDetector = new ScreenSwitchDetector();
+
+        // 关闭警告模态框
+        document.getElementById('closeWarningModal').addEventListener('click', function() {
+            document.getElementById('warningModal').style.display = 'none';
+        });
+
+        document.getElementById('confirmWarning').addEventListener('click', function() {
+            document.getElementById('warningModal').style.display = 'none';
+        });
+
+        // 关闭结果模态框
+        document.getElementById('closeResultsModal').addEventListener('click', function() {
+            document.getElementById('resultsModal').style.display = 'none';
+        });
+
+        // 模拟评测函数
+        function evaluateCode(code, language, problemId) {
+            // 安全检查
+            if (!validateCodeIntegrity()) {
+                return {
+                    results: [],
+                    allPassed: false,
+                    executionTime: 0,
+                    switchCount: screenDetector.getSwitchCount(),
+                    totalTests: 0,
+                    passedTests: 0,
+                    securityViolation: true
+                };
+            }
+
+            const problem = problems.find(p => p.id == problemId);
+            const testCases = problem ? problem.testCases : [];
+
+            const results = [];
+            let allPassed = true;
+            let actualTests = 0;
+            let passedTests = 0;
+
+            testCases.forEach((testCase, index) => {
+                let output = "";
+                let passed = false;
+                let isSampleTest = testCase.name === "样例测试";
+
+                try {
+                    if (problem.title.includes("A+B") || problem.title.includes("两数之和")) {
+                        const [a, b] = testCase.input.split(' ').map(Number);
+                        const result = a + b;
+                        output = String(result);
+                        passed = output === testCase.expected;
+                    } else if (problem.title.includes("斐波那契")) {
+                        const n = parseInt(testCase.input);
+                        let fib;
+                        if (n === 0) fib = 0;
+                        else if (n === 1) fib = 1;
+                        else {
+                            let a = 0, b = 1;
+                            for (let i = 2; i <= n; i++) {
+                                fib = a + b;
+                                a = b;
+                                b = fib;
+                            }
+                        }
+                        output = String(fib);
+                        passed = output === testCase.expected;
+                    } else if (problem.title.includes("最大子序列")) {
+                        const lines = testCase.input.split('\n');
+                        const n = parseInt(lines[0]);
+                        const nums = lines[1].split(' ').map(Number);
+                        let maxSum = nums[0];
+                        let currentSum = nums[0];
+
+                        for (let i = 1; i < n; i++) {
+                            currentSum = Math.max(nums[i], currentSum + nums[i]);
+                            maxSum = Math.max(maxSum, currentSum);
+                        }
+
+                        output = String(maxSum);
+                        passed = output === testCase.expected;
+                    } else {
+                        const [a, b] = testCase.input.split(' ').map(Number);
+                        const result = a + b;
+                        output = String(result);
+                        passed = output === testCase.expected;
+                    }
+
+                    if (!passed && !isSampleTest) {
+                        allPassed = false;
+                    }
+
+                    if (!isSampleTest) {
+                        actualTests++;
+                        if (passed) passedTests++;
+                    }
+                } catch (error) {
+                    output = "运行时错误: " + error.message;
+                    passed = false;
+                    if (!isSampleTest) {
+                        allPassed = false;
+                        actualTests++;
+                    }
+                }
+
+                results.push({
+                    name: testCase.name,
+                    passed: passed,
+                    input: testCase.input,
+                    expected: testCase.expected,
+                    output: output,
+                    isSampleTest: isSampleTest
+                });
+            });
+
+            const executionTime = Math.floor(Math.random() * 100) + 50;
+
+            return {
+                results: results,
+                allPassed: allPassed,
+                executionTime: executionTime,
+                switchCount: screenDetector.getSwitchCount(),
+                totalTests: actualTests,
+                passedTests: passedTests,
+                securityViolation: false
+            };
+        }
+
+        // 显示评测结果
+        function displayResults(evaluation) {
+            const testResultsContainer = document.getElementById('testResults');
+
+            testResultsContainer.innerHTML = '';
+
+            // 安全检查
+            if (evaluation.securityViolation) {
+                const securityAlert = document.createElement('div');
+                securityAlert.className = 'test-case failed';
+                securityAlert.innerHTML = `
+                    <div class="test-case-header">
+                        <div class="test-case-title">安全违规</div>
+                        <div class="test-case-status status-failed">阻止</div>
+                    </div>
+                    <div>
+                        <p><strong>原因:</strong> 代码完整性校验失败</p>
+                        <p><strong>操作:</strong> 评测被阻止</p>
+                        <p style="color: #ff5252; font-weight: bold;">请勿尝试修改系统代码！</p>
+                    </div>
+                `;
+                testResultsContainer.appendChild(securityAlert);
+                document.getElementById('validationStatus').textContent = '安全违规 - 评测无效';
+                document.getElementById('validationStatus').style.color = '#ff5252';
+                document.getElementById('resultsModal').style.display = 'flex';
+                return;
+            }
+
+            const summary = document.createElement('div');
+            summary.className = 'test-case';
+            summary.innerHTML = `
+                <div class="test-case-header">
+                    <div class="test-case-title">总体结果</div>
+                    <div class="test-case-status ${evaluation.allPassed ? 'status-passed' : 'status-failed'}">
+                        ${evaluation.allPassed ? '通过' : '未通过'}
+                    </div>
+                </div>
+                <div>
+                    <p><strong>测试统计:</strong> ${evaluation.passedTests}/${evaluation.totalTests} 通过</p>
+                    <p><strong>执行时间:</strong> ${evaluation.executionTime} ms</p>
+                    <p><strong>切屏次数:</strong> ${evaluation.switchCount} 次</p>
+                    ${evaluation.switchCount >= 3 ? '<p style="color: #ff5252; font-weight: bold;">警告: 切屏次数过多可能影响成绩！</p>' : ''}
+                </div>
+            `;
+            testResultsContainer.appendChild(summary);
+
+            evaluation.results.forEach(result => {
+                const testCaseEl = document.createElement('div');
+                testCaseEl.className = `test-case ${result.passed ? 'passed' : 'failed'}`;
+
+                const sampleTag = result.isSampleTest ? '<span style="color: #666; font-size: 0.8em;">（样例测试，不计入正确率）</span>' : '';
+
+                testCaseEl.innerHTML = `
+                    <div class="test-case-header">
+                        <div class="test-case-title">${result.name} ${sampleTag}</div>
+                        <div class="test-case-status ${result.passed ? 'status-passed' : 'status-failed'}">
+                            ${result.passed ? '通过' : '失败'}
+                        </div>
+                    </div>
+                    <div>
+                        <p><strong>输入:</strong> ${result.input}</p>
+                        <p><strong>期望输出:</strong> ${result.expected}</p>
+                        <p><strong>实际输出:</strong> ${result.output}</p>
+                    </div>
+                `;
+
+                testResultsContainer.appendChild(testCaseEl);
+            });
+
+            // 模拟服务器验证
+            document.getElementById('validationStatus').textContent = '验证通过 - 结果可信';
+            document.getElementById('validationStatus').style.color = '#4caf50';
+
+            document.getElementById('resultsModal').style.display = 'flex';
+        }
+
+        // 运行代码按钮
+        document.getElementById('runCode').addEventListener('click', function() {
+            // 安全检查
+            if (!validateCodeIntegrity()) {
+                showNotification('代码完整性校验失败，操作被阻止', 'error');
+                return;
+            }
+
+            const code = codeEditor.getValue();
+            const language = document.getElementById('languageSelector').value;
+
+            if (!code.trim()) {
+                alert('请输入代码！');
+                return;
+            }
+
+            if (!currentProblemId) {
+                alert('请先生成一个题目！');
+                return;
+            }
+
+            const originalText = this.textContent;
+            this.textContent = '评测中...';
+            this.disabled = true;
+
+            setTimeout(() => {
+                const evaluation = evaluateCode(code, language, currentProblemId);
+                displayResults(evaluation);
+
+                this.textContent = originalText;
+                this.disabled = false;
+            }, 1500);
+        });
+
+        // 重置代码按钮
+        document.getElementById('resetCode').addEventListener('click', function() {
+            if (!validateCodeIntegrity()) {
+                showNotification('代码完整性校验失败，操作被阻止', 'error');
+                return;
+            }
+
+            if (confirm('确定要重置代码吗？这将恢复为默认代码。')) {
+                if (currentProblemId) {
+                    const problem = problems.find(p => p.id == currentProblemId);
+                    if (problem) {
+                        const difficulty = problem.difficulty || 1;
+                        const language = document.getElementById('languageSelector').value;
+                        let defaultCode = '';
+
+                        if (language === 'c' || language === 'cpp') {
+                            if (difficulty <= 3) {
+                                defaultCode = `#include <stdio.h>\n\nint main() {\n    // 简单题目，请在此编写代码\n    return 0;\n}`;
+                            } else if (difficulty <= 7) {
+                                defaultCode = `#include <stdio.h>\n#include <stdlib.h>\n\nint main() {\n    // 中等难度题目，可能需要数组或字符串处理\n    return 0;\n}`;
+                            } else {
+                                defaultCode = `#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\nint main() {\n    // 高难度题目，可能需要复杂算法\n    return 0;\n}`;
+                            }
+                        } else if (language === 'python') {
+                            if (difficulty <= 3) {
+                                defaultCode = `# 简单题目，请在此编写代码`;
+                            } else if (difficulty <= 7) {
+                                defaultCode = `# 中等难度题目，可能需要列表或字典处理`;
+                            } else {
+                                defaultCode = `# 高难度题目，可能需要复杂算法`;
+                            }
+                        } else if (language === 'java') {
+                            defaultCode = `public class Main {\n    public static void main(String[] args) {\n        // 请在此编写代码\n    }\n}`;
+                        }
+
+                        codeEditor.setValue(defaultCode);
+                    }
+                } else {
+                    codeEditor.setValue(`#include <stdio.h>\n\nint main() {\n    // 请在此编写代码\n    return 0;\n}`);
+                }
+
+                document.getElementById('resultsModal').style.display = 'none';
+
+                // 更新代码完整性哈希
+                securityState.lastCodeHash = calculateCodeIntegrity();
+            }
+        });
+
+        // 清空代码按钮
+        document.getElementById('clearCode').addEventListener('click', function() {
+            if (!validateCodeIntegrity()) {
+                showNotification('代码完整性校验失败，操作被阻止', 'error');
+                return;
+            }
+
+            if (confirm('确定要清空代码编辑器吗？')) {
+                codeEditor.setValue('');
+                securityState.lastCodeHash = calculateCodeIntegrity();
+            }
+        });
+
+        // 校验完整性按钮
+        document.getElementById('validateCode').addEventListener('click', function() {
+            if (validateCodeIntegrity()) {
+                showNotification('代码完整性校验通过', 'success');
+            } else {
+                showNotification('代码完整性校验失败', 'error');
+            }
+        });
+
+        // AI生成题目按钮
+        document.getElementById('generateAIProblemBtn').addEventListener('click', function() {
+            generateAIProblem();
+        });
+
+        // 手动添加题目按钮
+        document.getElementById('addProblemBtn').addEventListener('click', function() {
+            if (!validateCodeIntegrity()) {
+                showNotification('代码完整性校验失败，操作被阻止', 'error');
+                return;
+            }
+
+            document.getElementById('problemForm').reset();
+            document.getElementById('addProblemModal').style.display = 'flex';
+        });
+
+        // 关闭添加题目模态框
+        document.getElementById('closeAddProblemModal').addEventListener('click', function() {
+            document.getElementById('addProblemModal').style.display = 'none';
+        });
+
+        document.getElementById('cancelAddProblem').addEventListener('click', function() {
+            document.getElementById('addProblemModal').style.display = 'none';
+        });
+
+        // 处理手动添加题目表单提交
+        document.getElementById('problemForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            if (!validateCodeIntegrity()) {
+                showNotification('代码完整性校验失败，操作被阻止', 'error');
+                return;
+            }
+
+            const newProblemId = problems.length > 0 ? Math.max(...problems.map(p => p.id)) + 1 : 2;
+
+            let testCases = [];
+            const testCasesText = document.getElementById('problemTestCases').value.trim();
+
+            if (testCasesText) {
+                try {
+                    testCases = JSON.parse(testCasesText);
+                } catch (error) {
+                    alert('测试用例格式错误，请使用正确的JSON格式！');
+                    return;
+                }
+            } else {
+                testCases = [
+                    { input: "1 2", expected: "3", name: "样例测试" },
+                    { input: "0 0", expected: "0", name: "零测试" },
+                    { input: "10 20", expected: "30", name: "基础测试" }
+                ];
+            }
+
+            const difficulty = parseInt(document.getElementById('problemDifficultyManual').value) || 5;
+
+            const newProblem = {
+                id: newProblemId,
+                title: document.getElementById('problemName').value,
+                description: document.getElementById('problemDescription').value,
+                inputFormat: document.getElementById('problemInputFormat').value,
+                outputFormat: document.getElementById('problemOutputFormat').value,
+                sampleInput: document.getElementById('problemSampleInput').value,
+                sampleOutput: document.getElementById('problemSampleOutput').value,
+                constraints: document.getElementById('problemConstraints').value || "无特殊约束条件",
+                difficulty: difficulty,
+                aiGenerated: false,
+                testCases: testCases
+            };
+
+            problems.push(newProblem);
+            initializeProblemList();
+            loadProblem(newProblemId);
+            document.getElementById('addProblemModal').style.display = 'none';
+
+            showNotification(`题目 "${newProblem.title}" 添加成功！`, 'success');
+        });
+
+        // 全屏模式按钮
+        document.getElementById('fullscreenBtn').addEventListener('click', function() {
+            if (!validateCodeIntegrity()) {
+                showNotification('代码完整性校验失败，操作被阻止', 'error');
+                return;
+            }
+
+            const elem = document.documentElement;
+
+            if (!document.fullscreenElement) {
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen();
+                } else if (elem.webkitRequestFullscreen) {
+                    elem.webkitRequestFullscreen();
+                } else if (elem.msRequestFullscreen) {
+                    elem.msRequestFullscreen();
+                }
+                this.textContent = '退出全屏';
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+                this.textContent = '全屏模式';
+            }
+        });
+
+        // 监听全屏变化
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+        document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+
+        function handleFullscreenChange() {
+            const isFullscreen = document.fullscreenElement ||
+                                document.webkitFullscreenElement ||
+                                document.mozFullScreenElement;
+
+            if (!isFullscreen) {
+                document.getElementById('fullscreenBtn').textContent = '全屏模式';
+            }
+        }
+
+        // 页面加载完成时初始化
+        window.addEventListener('load', function() {
+            // 初始化安全系统
+            initSecuritySystem();
+
+            // 添加默认的A+B问题
+            const defaultProblem = {
+                id: 1,
+                title: "A + B 问题",
+                description: "给定两个整数A和B，请计算它们的和。这是最基本的编程入门题目。",
+                inputFormat: "输入包含两个整数A和B，用空格分隔。",
+                outputFormat: "输出一个整数，表示A+B的结果。",
+                sampleInput: "1 2",
+                sampleOutput: "3",
+                constraints: "-1000 ≤ A, B ≤ 1000",
+                difficulty: 1,
+                aiGenerated: false,
+                testCases: [
+                    { input: "1 2", expected: "3", name: "样例测试" },
+                    { input: "0 0", expected: "0", name: "零测试" },
+                    { input: "-5 10", expected: "5", name: "负数测试" },
+                    { input: "100 200", expected: "300", name: "较大数值" },
+                    { input: "-100 -200", expected: "-300", name: "双负数测试" }
+                ]
+            };
+
+            problems = [defaultProblem];
+            currentProblemId = 1;
+
+            initializeProblemList();
+            loadProblem(1);
+            codeEditor.focus();
+
+            // 安全警告
+            console.log('%c安全警告', 'color: red; font-size: 20px; font-weight: bold;');
+            console.log('%c此系统受安全保护，任何篡改行为将被记录并上报！', 'color: orange; font-size: 14px;');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>远程协助 - 网页客户端</title>
+    <link rel="icon" href="https://yhsun.cn/educoder/icon.png" type="image/png">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: white;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 100%;
+            height: 100%;
+            background: white;
+            border-radius: 0;
+            box-shadow: none;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4a6ee0 0%, #6a11cb 100%);
+            color: white;
+            padding: 15px 20px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            font-size: 22px;
+            margin-bottom: 3px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 13px;
+        }
+
+        .content {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* 登录界面默认隐藏 */
+        .login-screen {
+            padding: 30px 20px;
+            text-align: center;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+
+        .login-screen.show {
+            display: flex;
+        }
+
+        .chat-screen {
+            display: none;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .chat-screen.active {
+            display: flex;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #4a6ee0 0%, #6a11cb 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 16px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+            font-weight: 600;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(74, 110, 224, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+            font-weight: 500;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(108, 117, 125, 0.3);
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 8px;
+            background: #f8f9fa;
+            font-size: 14px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .messages-container {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            border-bottom: 1px solid #eee;
+        }
+
+        .message {
+            margin-bottom: 12px;
+            max-width: 70%;
+            clear: both;
+        }
+
+        .message.me {
+            float: right;
+        }
+
+        .message.other {
+            float: left;
+        }
+
+        .message-content {
+            padding: 10px 14px;
+            border-radius: 18px;
+            word-break: break-word;
+            line-height: 1.4;
+            white-space: pre-wrap;
+        }
+
+        .message.me .message-content {
+            background: linear-gradient(135deg, #4a6ee0 0%, #6a11cb 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.other .message-content {
+            background: #f0f2f5;
+            color: #333;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+
+        .message.other .message-time {
+            text-align: left;
+        }
+
+        .message.me .message-time {
+            text-align: right;
+        }
+
+        .input-container {
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            gap: 8px;
+            border-top: 1px solid #eee;
+            flex-shrink: 0;
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-container textarea {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #ddd;
+            border-radius: 15px;
+            outline: none;
+            font-size: 16px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+            resize: vertical;
+            min-height: 50px;
+            max-height: 200px;
+            line-height: 1.4;
+        }
+
+        .input-container textarea:focus {
+            border-color: #4a6ee0;
+        }
+
+        .input-container textarea:disabled {
+            background: #f8f9fa;
+            cursor: not-allowed;
+        }
+
+        .send-hint {
+            font-size: 12px;
+            color: #666;
+            text-align: right;
+            padding-right: 5px;
+        }
+
+        .typing-indicator {
+            padding: 0 15px 8px;
+            color: #666;
+            font-size: 14px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+
+        .system-message {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin: 10px 0;
+            clear: both;
+        }
+
+        /* 移除连接状态栏 */
+        .connection-status {
+            display: none;
+        }
+
+        .connection-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .reconnect-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .reconnect-info {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #dc3545;
+        }
+
+        .status-dot.connected {
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.reconnecting {
+            background: #ffc107;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .reconnect-progress {
+            width: 100px;
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-left: 10px;
+        }
+
+        .reconnect-progress-bar {
+            height: 100%;
+            background: #4a6ee0;
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .loading-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4a6ee0;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .connection-indicator {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: none;
+        }
+
+        .connection-indicator.connected {
+            background: rgba(40, 167, 69, 0.8);
+        }
+
+        .connection-indicator.disconnected {
+            background: rgba(220, 53, 69, 0.8);
+        }
+
+        .connection-indicator.reconnecting {
+            background: rgba(255, 193, 7, 0.8);
+        }
+
+        /* 图片消息样式 */
+        .image-message {
+            max-width: 100%;
+            margin: 5px 0;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .image-message:hover {
+            transform: scale(1.02);
+        }
+
+        .image-message img {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            object-fit: contain;
+        }
+
+        .image-message.small {
+            max-width: 200px;
+        }
+
+        /* 图片预览模态框 */
+        .image-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .image-modal-content {
+            max-width: 90%;
+            max-height: 90%;
+            position: relative;
+        }
+
+        .image-modal img {
+            max-width: 100%;
+            max-height: 90vh;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .image-modal-close {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 5px 10px;
+        }
+
+        .image-modal-close:hover {
+            color: #4a6ee0;
+        }
+
+        .image-modal-controls {
+            position: absolute;
+            bottom: -50px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .image-modal-btn {
+            background: rgba(74, 110, 224, 0.8);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        .image-modal-btn:hover {
+            background: rgba(74, 110, 224, 1);
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                padding: 12px 15px;
+            }
+
+            .header h1 {
+                font-size: 20px;
+            }
+
+            .header p {
+                font-size: 12px;
+            }
+
+            .messages-container {
+                padding: 12px;
+            }
+
+            .message {
+                max-width: 85%;
+            }
+
+            .input-container {
+                padding: 12px;
+            }
+
+            .input-container textarea {
+                min-height: 45px;
+                max-height: 150px;
+            }
+
+            .reconnect-controls {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .send-hint {
+                font-size: 11px;
+            }
+
+            .image-message img {
+                max-height: 250px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .input-container textarea {
+                min-height: 40px;
+                max-height: 120px;
+            }
+
+            .btn-secondary {
+                padding: 8px 15px;
+                font-size: 13px;
+            }
+
+            .reconnect-info {
+                font-size: 12px;
+            }
+
+            .image-message img {
+                max-height: 200px;
+            }
+
+            .image-modal-controls {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 连接状态指示器（固定在右上角） -->
+    <div class="connection-indicator" id="connectionIndicator">
+        <span id="indicatorText">连接状态</span>
+    </div>
+
+    <!-- 图片预览模态框 -->
+    <div class="image-modal" id="imageModal">
+        <button class="image-modal-close" id="imageModalClose">&times;</button>
+        <div class="image-modal-content">
+            <img id="modalImage" src="" alt="预览图片">
+        </div>
+        <div class="image-modal-controls">
+            <button class="image-modal-btn" id="saveImageBtn">保存图片</button>
+            <button class="image-modal-btn" id="copyImageBtn">复制链接</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>远程协助系统</h1>
+        </div>
+
+        <div class="content">
+            <!-- 加载界面 -->
+            <div class="loading-screen" id="loadingScreen">
+                <div class="loader"></div>
+                <h2>正在连接...</h2>
+                <p id="loadingStatus">正在检测自动连接参数</p>
+            </div>
+
+            <!-- 登录界面（仅在需要手动输入时显示） -->
+            <div class="login-screen" id="loginScreen">
+                <h2>手动输入OTP</h2>
+                <p>请在客户端获取OTP并输入</p>
+
+                <input type="text"
+                       id="manualOtpInput"
+                       placeholder="输入6位数字OTP"
+                       maxlength="6"
+                       pattern="[0-9]*"
+                       style="width: 200px; padding: 10px; margin: 20px 0; font-size: 18px; text-align: center;"
+                >
+
+                <button class="btn" id="connectBtn" onclick="manualConnect()">连接</button>
+
+                <div class="instructions" style="margin-top: 20px; max-width: 500px;">
+                    <p><strong>使用说明：</strong></p>
+                    <p>1. 扫描客户端二维码或访问客户端提供的链接可自动连接</p>
+                    <p>2. 如需手动连接，请输入客户端显示的6位数字OTP</p>
+                    <p>3. 连接将保持活跃，即使离开页面也不会断开</p>
+                </div>
+
+                <div class="status" id="loginStatus"></div>
+            </div>
+
+            <!-- 聊天界面 -->
+            <div class="chat-screen" id="chatScreen">
+                <!-- 移除了connection-status部分 -->
+
+                <div class="messages-container" id="messagesContainer">
+                    <div class="system-message" id="welcomeMessage">
+                        正在连接到Python客户端...
+                    </div>
+                </div>
+
+                <div class="typing-indicator" id="typingIndicator"></div>
+
+                <div class="input-container">
+                    <div class="input-wrapper">
+                        <textarea
+                            id="messageInput"
+                            placeholder="输入消息... (按回车换行，Ctrl+Enter发送)"
+                            onkeydown="handleKeyDown(event)"
+                            disabled
+                        ></textarea>
+                        <button class="btn" id="sendBtn" onclick="sendMessage()" disabled>发送</button>
+                    </div>
+                    <div class="send-hint">按回车键换行，Ctrl+Enter 或 Cmd+Enter 发送消息</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let websocket = null;
+        let clientId = null;
+        let isConnected = false;
+        let typingTimeout = null;
+        let currentOTP = null;
+        let isAutoReconnectEnabled = true;
+        let reconnectAttempts = 0;
+        let maxReconnectAttempts = 30;
+        let reconnectDelay = 2000;
+        let maxReconnectDelay = 60000;
+        let reconnectTimer = null;
+        let reconnectProgressInterval = null;
+
+        // 心跳相关变量
+        let heartbeatInterval = null;
+        let heartbeatTimer = null;
+        let lastHeartbeatTime = null;
+        const HEARTBEAT_INTERVAL = 20000;
+        const HEARTBEAT_TIMEOUT = 30000;
+
+        // 页面可见性相关
+        let pageVisible = true;
+        let hidden, visibilityChange;
+        if (typeof document.hidden !== "undefined") {
+            hidden = "hidden";
+            visibilityChange = "visibilitychange";
+        } else if (typeof document.msHidden !== "undefined") {
+            hidden = "msHidden";
+            visibilityChange = "msvisibilitychange";
+        } else if (typeof document.webkitHidden !== "undefined") {
+            hidden = "webkitHidden";
+            visibilityChange = "webkitvisibilitychange";
+        }
+
+        // 网络状态检测
+        let networkOnline = navigator.onLine;
+
+        // 图片处理相关
+        let currentImageUrl = '';
+
+        // 页面加载完成后初始化
+        window.onload = function() {
+            // 初始化页面可见性监听
+            if (typeof document.addEventListener === "undefined" || hidden === undefined) {
+                console.log("页面可见性API不支持");
+            } else {
+                document.addEventListener(visibilityChange, handleVisibilityChange, false);
+            }
+
+            // 初始化网络状态监听
+            window.addEventListener('online', handleNetworkOnline);
+            window.addEventListener('offline', handleNetworkOffline);
+
+            // 初始化图片模态框事件
+            initImageModal();
+
+            // 从URL参数获取OTP
+            const urlParams = new URLSearchParams(window.location.search);
+            const otpFromUrl = urlParams.get('otp');
+
+            if (otpFromUrl && /^\d{6}$/.test(otpFromUrl)) {
+                // 有有效的OTP参数，自动连接
+                document.getElementById('loadingStatus').textContent = '检测到OTP，正在自动连接...';
+                currentOTP = otpFromUrl;
+
+                // 延迟1秒后自动连接（显示加载动画）
+                setTimeout(() => {
+                    autoConnectWithOTP(otpFromUrl);
+                }, 1000);
+            } else {
+                // 没有有效的OTP参数，显示手动输入界面
+                setTimeout(() => {
+                    document.getElementById('loadingScreen').style.display = 'none';
+                    document.getElementById('loginScreen').classList.add('show');
+                    document.getElementById('manualOtpInput').focus();
+                }, 1000);
+            }
+
+            // 初始化连接指示器
+            updateConnectionIndicator('initializing', '初始化中...');
+        };
+
+        // 初始化图片模态框
+        function initImageModal() {
+            const modal = document.getElementById('imageModal');
+            const closeBtn = document.getElementById('imageModalClose');
+            const saveBtn = document.getElementById('saveImageBtn');
+            const copyBtn = document.getElementById('copyImageBtn');
+
+            // 关闭模态框
+            closeBtn.addEventListener('click', function() {
+                modal.style.display = 'none';
+            });
+
+            // 点击模态框背景关闭
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+
+            // 保存图片
+            saveBtn.addEventListener('click', function() {
+                if (currentImageUrl) {
+                    const link = document.createElement('a');
+                    link.href = currentImageUrl;
+                    link.download = 'remote-assist-image-' + Date.now() + '.png';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            });
+
+            // 复制图片链接
+            copyBtn.addEventListener('click', function() {
+                if (currentImageUrl) {
+                    navigator.clipboard.writeText(currentImageUrl)
+                        .then(() => {
+                            alert('图片链接已复制到剪贴板');
+                        })
+                        .catch(err => {
+                            console.error('复制失败: ', err);
+                            // 降级方案
+                            const textArea = document.createElement('textarea');
+                            textArea.value = currentImageUrl;
+                            document.body.appendChild(textArea);
+                            textArea.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(textArea);
+                            alert('图片链接已复制到剪贴板');
+                        });
+                }
+            });
+
+            // 按ESC键关闭模态框
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && modal.style.display === 'flex') {
+                    modal.style.display = 'none';
+                }
+            });
+        }
+
+        // 打开图片预览
+        function openImagePreview(imageUrl) {
+            currentImageUrl = imageUrl;
+            const modal = document.getElementById('imageModal');
+            const modalImage = document.getElementById('modalImage');
+
+            modalImage.src = imageUrl;
+            modal.style.display = 'flex';
+        }
+
+        // 检查是否为图片URL
+        function isImageUrl(text) {
+            // 检查是否是常见的图片URL格式
+            const imageUrlPattern = /^(https?:\/\/.*\.(png|jpg|jpeg|gif|bmp|webp|svg))(\?.*)?$/i;
+            return imageUrlPattern.test(text.trim());
+        }
+
+        // 提取可能的图片URL（从消息文本中提取）
+        function extractImageUrl(text) {
+            // 尝试从消息中提取URL
+            const urlPattern = /(https?:\/\/[^\s]+)/g;
+            const urls = text.match(urlPattern);
+
+            if (urls) {
+                for (const url of urls) {
+                    if (isImageUrl(url)) {
+                        return url;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        // 页面可见性变化处理
+        function handleVisibilityChange() {
+            pageVisible = !document[hidden];
+
+            if (pageVisible) {
+                console.log('页面变为可见');
+                if (!isConnected && currentOTP) {
+                    attemptReconnect();
+                }
+                adjustHeartbeatForVisibility(true);
+            } else {
+                console.log('页面变为隐藏');
+                adjustHeartbeatForVisibility(false);
+            }
+        }
+
+        // 网络状态变化处理
+        function handleNetworkOnline() {
+            console.log('网络恢复在线');
+            networkOnline = true;
+            updateConnectionIndicator('reconnecting', '网络恢复，重新连接中...');
+
+            if (!isConnected && currentOTP) {
+                setTimeout(() => {
+                    attemptReconnect();
+                }, 1000);
+            }
+        }
+
+        function handleNetworkOffline() {
+            console.log('网络断开');
+            networkOnline = false;
+            updateConnectionIndicator('disconnected', '网络已断开');
+
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+        }
+
+        // 根据页面可见性调整心跳频率
+        function adjustHeartbeatForVisibility(isVisible) {
+            if (heartbeatTimer) {
+                clearInterval(heartbeatTimer);
+                heartbeatTimer = null;
+            }
+
+            if (isVisible && isConnected) {
+                heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+            } else if (!isVisible && isConnected) {
+                heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL * 2);
+            }
+        }
+
+        // 发送心跳包
+        function sendHeartbeat() {
+            if (isConnected && websocket && websocket.readyState === WebSocket.OPEN) {
+                try {
+                    websocket.send(JSON.stringify({
+                        type: 'heartbeat',
+                        timestamp: Date.now(),
+                        client_id: clientId
+                    }));
+                    lastHeartbeatTime = Date.now();
+                    console.log('心跳包已发送');
+                } catch (error) {
+                    console.error('发送心跳包失败:', error);
+                }
+            }
+        }
+
+        // 检查心跳响应
+        function checkHeartbeatResponse() {
+            if (isConnected && lastHeartbeatTime) {
+                const timeSinceLastHeartbeat = Date.now() - lastHeartbeatTime;
+                if (timeSinceLastHeartbeat > HEARTBEAT_TIMEOUT) {
+                    console.warn('心跳超时，连接可能已断开');
+                    if (websocket) {
+                        websocket.close();
+                    }
+                }
+            }
+        }
+
+        // 启动心跳机制
+        function startHeartbeat() {
+            if (heartbeatTimer) {
+                clearInterval(heartbeatTimer);
+            }
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+            }
+
+            heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+            heartbeatInterval = setInterval(checkHeartbeatResponse, 10000);
+        }
+
+        // 停止心跳机制
+        function stopHeartbeat() {
+            if (heartbeatTimer) {
+                clearInterval(heartbeatTimer);
+                heartbeatTimer = null;
+            }
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+                heartbeatInterval = null;
+            }
+            lastHeartbeatTime = null;
+        }
+
+        // 更新连接状态指示器
+        function updateConnectionIndicator(status, message) {
+            const indicator = document.getElementById('connectionIndicator');
+            const indicatorText = document.getElementById('indicatorText');
+
+            indicator.style.display = 'block';
+            indicator.className = 'connection-indicator';
+
+            switch(status) {
+                case 'connected':
+                    indicator.classList.add('connected');
+                    indicatorText.textContent = message || '已连接';
+                    break;
+                case 'disconnected':
+                    indicator.classList.add('disconnected');
+                    indicatorText.textContent = message || '连接已断开';
+                    break;
+                case 'reconnecting':
+                    indicator.classList.add('reconnecting');
+                    indicatorText.textContent = message || '正在重新连接...';
+                    break;
+                default:
+                    indicatorText.textContent = message || '连接状态';
+            }
+        }
+
+        // 使用URL中的OTP自动连接
+        async function autoConnectWithOTP(otp) {
+            const loadingStatus = document.getElementById('loadingStatus');
+
+            try {
+                loadingStatus.textContent = '正在验证OTP...';
+                updateConnectionIndicator('reconnecting', '正在验证OTP...');
+
+                const response = await fetch('/api/validate-otp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ otp: otp })
+                });
+
+                const result = await response.json();
+
+                if (result.valid) {
+                    loadingStatus.textContent = 'OTP验证成功，正在建立连接...';
+                    updateConnectionIndicator('reconnecting', 'OTP验证成功，正在建立连接...');
+
+                    clientId = 'web-' + Math.random().toString(36).substr(2, 9);
+
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const host = window.location.hostname;
+                    const wsPort = 8765;
+
+                    websocket = new WebSocket(`${protocol}//${host}:${wsPort}`);
+
+                    websocket.onopen = () => {
+                        websocket.send(JSON.stringify({
+                            type: 'register',
+                            client_type: 'web',
+                            client_id: clientId,
+                            otp: otp
+                        }));
+
+                        startHeartbeat();
+                    };
+
+                    websocket.onmessage = handleWebSocketMessage;
+                    websocket.onclose = handleWebSocketClose;
+                    websocket.onerror = handleWebSocketError;
+
+                } else {
+                    loadingStatus.textContent = `OTP验证失败: ${result.error}`;
+                    updateConnectionIndicator('disconnected', `OTP验证失败: ${result.error}`);
+                    setTimeout(() => {
+                        document.getElementById('loadingScreen').style.display = 'none';
+                        document.getElementById('loginScreen').classList.add('show');
+                    }, 2000);
+                }
+
+            } catch (error) {
+                loadingStatus.textContent = `连接失败: ${error.message}`;
+                updateConnectionIndicator('disconnected', `连接失败: ${error.message}`);
+                setTimeout(() => {
+                    document.getElementById('loadingScreen').style.display = 'none';
+                    document.getElementById('loginScreen').classList.add('show');
+                }, 2000);
+            }
+        }
+
+        // 手动连接
+        async function manualConnect() {
+            const otpInput = document.getElementById('manualOtpInput');
+            const otp = otpInput.value.trim();
+
+            if (!/^\d{6}$/.test(otp)) {
+                showLoginStatus('请输入6位数字OTP', 'error');
+                return;
+            }
+
+            currentOTP = otp;
+            document.getElementById('loginScreen').classList.remove('show');
+            document.getElementById('loadingScreen').style.display = 'flex';
+            document.getElementById('loadingStatus').textContent = '正在连接...';
+            updateConnectionIndicator('reconnecting', '正在连接...');
+
+            await autoConnectWithOTP(otp);
+        }
+
+        // 显示登录状态
+        function showLoginStatus(message, type) {
+            const loginStatus = document.getElementById('loginStatus');
+            loginStatus.textContent = message;
+            loginStatus.className = 'status';
+
+            if (type === 'success') {
+                loginStatus.classList.add('connected');
+            } else if (type === 'error') {
+                loginStatus.classList.add('disconnected');
+            }
+        }
+
+        // 处理WebSocket消息
+        function handleWebSocketMessage(event) {
+            try {
+                const data = JSON.parse(event.data);
+
+                switch (data.type) {
+                    case 'paired':
+                        handlePaired(data);
+                        break;
+
+                    case 'message':
+                        addMessage(data.text, 'other', data.timestamp);
+                        break;
+
+                    case 'typing':
+                        showTypingIndicator(data.is_typing);
+                        break;
+
+                    case 'disconnected':
+                        handleDisconnected(data.message);
+                        break;
+
+                    case 'error':
+                        addSystemMessage(`错误: ${data.message}`);
+                        break;
+
+                    case 'heartbeat_ack':
+                        lastHeartbeatTime = Date.now();
+                        console.log('收到心跳响应');
+                        break;
+                }
+
+            } catch (error) {
+                console.error('解析消息失败:', error);
+            }
+        }
+
+        // 处理配对成功
+        function handlePaired(data) {
+            isConnected = true;
+
+            resetReconnectState();
+
+            document.getElementById('loadingScreen').style.display = 'none';
+            document.getElementById('loginScreen').classList.remove('show');
+            document.getElementById('chatScreen').classList.add('active');
+
+            updateConnectionIndicator('connected', '已连接');
+
+            const welcomeMessage = document.getElementById('welcomeMessage');
+            welcomeMessage.textContent = `已连接到Python客户端 (${data.python_client_id})`;
+
+            const messageInput = document.getElementById('messageInput');
+            const sendBtn = document.getElementById('sendBtn');
+
+            messageInput.disabled = false;
+            sendBtn.disabled = false;
+            messageInput.focus();
+
+            autoResizeTextarea(messageInput);
+            adjustHeartbeatForVisibility(pageVisible);
+        }
+
+        // 处理断开连接
+        function handleDisconnected(message) {
+            isConnected = false;
+            updateConnectionIndicator('disconnected', '连接已断开');
+
+            addSystemMessage(message);
+
+            const messageInput = document.getElementById('messageInput');
+            const sendBtn = document.getElementById('sendBtn');
+
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+
+            stopHeartbeat();
+
+            if (isAutoReconnectEnabled && currentOTP && networkOnline) {
+                startAutoReconnect();
+            }
+        }
+
+        // 处理WebSocket关闭
+        function handleWebSocketClose(event) {
+            isConnected = false;
+
+            let closeMessage = `连接已断开 (代码: ${event.code})`;
+
+            if (event.code === 1000) {
+                updateConnectionIndicator('disconnected', '连接已正常关闭');
+                closeMessage = '连接已正常关闭';
+            } else {
+                updateConnectionIndicator('reconnecting', '连接异常断开，正在尝试重连...');
+
+                if (isAutoReconnectEnabled && currentOTP && networkOnline) {
+                    startAutoReconnect();
+                }
+            }
+
+            addSystemMessage(closeMessage);
+            stopHeartbeat();
+        }
+
+        // 处理WebSocket错误
+        function handleWebSocketError(error) {
+            console.error('WebSocket错误:', error);
+            updateConnectionIndicator('disconnected', '连接发生错误');
+            addSystemMessage('连接发生错误');
+
+            stopHeartbeat();
+
+            if (isAutoReconnectEnabled && currentOTP && networkOnline) {
+                startAutoReconnect();
+            }
+        }
+
+        // 开始自动重连
+        function startAutoReconnect() {
+            if (!isAutoReconnectEnabled || !currentOTP || !networkOnline) {
+                return;
+            }
+
+            reconnectAttempts = 0;
+            attemptReconnect();
+        }
+
+        // 尝试重连
+        function attemptReconnect() {
+            if (!isAutoReconnectEnabled || !currentOTP || !networkOnline) {
+                return;
+            }
+
+            reconnectAttempts++;
+
+            if (reconnectAttempts > maxReconnectAttempts) {
+                updateConnectionIndicator('disconnected', '已达到最大重连次数');
+                addSystemMessage('已达到最大重连次数，请检查网络连接或重新登录');
+                return;
+            }
+
+            const currentDelay = Math.min(reconnectDelay * Math.pow(1.5, reconnectAttempts - 1), maxReconnectDelay);
+
+            updateConnectionIndicator('reconnecting', `正在尝试重新连接 (${reconnectAttempts}/${maxReconnectAttempts})...`);
+
+            reconnectTimer = setTimeout(() => {
+                performReconnect();
+            }, currentDelay);
+        }
+
+        // 执行重连
+        async function performReconnect() {
+            if (!isAutoReconnectEnabled || !currentOTP || !networkOnline) {
+                return;
+            }
+
+            try {
+                updateConnectionIndicator('reconnecting', '正在重新连接...');
+                addSystemMessage(`正在尝试重新连接 (${reconnectAttempts}/${maxReconnectAttempts})...`);
+
+                clientId = 'web-' + Math.random().toString(36).substr(2, 9);
+
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.hostname;
+                const wsPort = 8765;
+
+                websocket = new WebSocket(`${protocol}//${host}:${wsPort}`);
+
+                websocket.onopen = () => {
+                    websocket.send(JSON.stringify({
+                        type: 'register',
+                        client_type: 'web',
+                        client_id: clientId,
+                        otp: currentOTP
+                    }));
+
+                    startHeartbeat();
+                };
+
+                websocket.onmessage = handleWebSocketMessage;
+                websocket.onclose = handleWebSocketClose;
+                websocket.onerror = handleWebSocketError;
+
+            } catch (error) {
+                console.error('重连失败:', error);
+                attemptReconnect();
+            }
+        }
+
+        // 手动重连
+        function manualReconnect() {
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+
+            reconnectAttempts = 0;
+            performReconnect();
+        }
+
+        // 停止自动重连
+        function stopAutoReconnect() {
+            isAutoReconnectEnabled = false;
+
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+
+            updateConnectionIndicator('disconnected', '自动重连已停止');
+            addSystemMessage('已停止自动重连，如需重新连接请刷新页面');
+        }
+
+        // 重置重连状态
+        function resetReconnectState() {
+            reconnectAttempts = 0;
+
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+        }
+
+        // 添加消息到聊天窗口
+        function addMessage(text, sender, timestamp) {
+            const messagesContainer = document.getElementById('messagesContainer');
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+
+            const timeStr = timestamp ? formatTime(timestamp) : formatTime(new Date().toISOString());
+
+            // 检查是否是图片URL
+            const imageUrl = extractImageUrl(text);
+
+            if (imageUrl) {
+                // 如果是图片URL，显示为图片
+                const imageDiv = document.createElement('div');
+                imageDiv.className = 'image-message';
+
+                const img = document.createElement('img');
+                img.src = imageUrl;
+                img.alt = '接收到的图片';
+                img.loading = 'lazy';
+
+                // 添加点击事件
+                img.addEventListener('click', function() {
+                    openImagePreview(imageUrl);
+                });
+
+                imageDiv.appendChild(img);
+
+                messageDiv.innerHTML = `
+                    <div class="message-content">
+                        <div>${escapeHtml(text.replace(imageUrl, '').trim())}</div>
+                    </div>
+                    <div class="message-time">${timeStr}</div>
+                `;
+
+                // 将图片插入到消息内容中
+                const messageContent = messageDiv.querySelector('.message-content');
+                messageContent.appendChild(imageDiv);
+
+            } else {
+                // 普通文本消息
+                const escapedText = escapeHtml(text);
+                const formattedText = escapedText.replace(/\n/g, '<br>');
+
+                messageDiv.innerHTML = `
+                    <div class="message-content">${formattedText}</div>
+                    <div class="message-time">${timeStr}</div>
+                `;
+            }
+
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // 添加系统消息
+        function addSystemMessage(text) {
+            const messagesContainer = document.getElementById('messagesContainer');
+
+            const systemDiv = document.createElement('div');
+            systemDiv.className = 'system-message';
+            systemDiv.textContent = text;
+
+            messagesContainer.appendChild(systemDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // 显示打字指示器
+        function showTypingIndicator(isTyping) {
+            const typingIndicator = document.getElementById('typingIndicator');
+
+            if (isTyping) {
+                typingIndicator.textContent = 'Python客户端正在输入...';
+            } else {
+                typingIndicator.textContent = '';
+            }
+        }
+
+        // 发送消息
+        function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const text = messageInput.value.trim();
+
+            if (!text || !isConnected || !websocket) return;
+
+            websocket.send(JSON.stringify({
+                type: 'message',
+                text: text
+            }));
+
+            addMessage(text, 'me');
+
+            messageInput.value = '';
+            autoResizeTextarea(messageInput);
+            messageInput.focus();
+
+            sendTypingEvent(false);
+        }
+
+        // 发送打字事件
+        function sendTypingEvent(isTyping) {
+            if (isConnected && websocket) {
+                websocket.send(JSON.stringify({
+                    type: 'typing',
+                    is_typing: isTyping
+                }));
+            }
+        }
+
+        // 处理键盘事件
+        function handleKeyDown(event) {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                sendMessage();
+            } else if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+                if (typingTimeout) clearTimeout(typingTimeout);
+                sendTypingEvent(true);
+                typingTimeout = setTimeout(() => {
+                    sendTypingEvent(false);
+                }, 3000);
+            } else {
+                if (typingTimeout) clearTimeout(typingTimeout);
+
+                sendTypingEvent(true);
+
+                typingTimeout = setTimeout(() => {
+                    sendTypingEvent(false);
+                }, 3000);
+            }
+        }
+
+        // 自动调整文本区域高度
+        function autoResizeTextarea(textarea) {
+            textarea.style.height = 'auto';
+            const maxHeight = parseInt(getComputedStyle(textarea).maxHeight) || 200;
+            const newHeight = Math.min(textarea.scrollHeight, maxHeight);
+            textarea.style.height = newHeight + 'px';
+        }
+
+        // 格式化时间
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // HTML转义
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 页面卸载前清理
+        window.addEventListener('beforeunload', function() {
+            stopHeartbeat();
+            if (typingTimeout) clearTimeout(typingTimeout);
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.close(1000, '页面关闭');
+            }
+        });
+    </script>
+</body>
+</html>

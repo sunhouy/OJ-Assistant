@@ -57,15 +57,27 @@ class RemoteAssistDialog:
         self.stop_requested = False  # ESC键停止标志
 
         # 截图相关变量
-        self.screenshot_enabled = tk.BooleanVar(value=False)  # 默认禁用截图快捷键
+        self.screenshot_enabled = tk.BooleanVar(value=True)  # 默认启用截图快捷键
+        # 注册快捷键
+        try:
+            keyboard.add_hotkey('ctrl+q', self.on_screenshot_shortcut)
+            self.screenshot_hotkey_registered = True
+        except Exception as e:
+            self.screenshot_enabled = tk.BooleanVar(value=False)
+
         self.screenshot_hotkey_registered = False  # 热键是否已注册
 
         # 创建对话框窗口
+
         self.dialog = tk.Toplevel(parent)
+        self.dialog.attributes('-toolwindow', False)
         self.dialog.title("远程协助")
         self.dialog.geometry("800x1000")
-        self.dialog.transient(parent)
-        self.dialog.grab_set()
+        self.dialog.resizable(True, True)  # 允许调整大小
+        self.dialog.minsize(600, 600)  # 设置最小尺寸
+        self.dialog.maxsize(1920, 1080)  # 设置最大尺寸
+        # self.dialog.transient(parent)
+        # self.dialog.grab_set()
         self.dialog.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         # 设置客户端回调函数
@@ -687,7 +699,7 @@ class RemoteAssistDialog:
 
     def _send_image_url_to_server(self, file_url):
         """向服务器发送图片URL消息"""
-        message = f"发送图片{file_url}"
+        message = f"发送屏幕截图{file_url}"
         if self.client:
             # 使用客户端的安全发送方法
             self.client.send_message_threadsafe(message)
