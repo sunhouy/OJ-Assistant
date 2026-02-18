@@ -34,6 +34,7 @@ class InputSimulator:
             keyboard.on_press_key('esc', self.set_esc_pressed, suppress=False)
 
             # 激活编辑器（点击屏幕中央）
+            """
             screen_width, screen_height = pyautogui.size()
             x = screen_width // 2
             y = screen_height // 2
@@ -45,6 +46,7 @@ class InputSimulator:
             time.sleep(0.05)
             keyboard.press_and_release('delete')
             time.sleep(0.05)
+            """
 
             # 检查ESC键
             if self.esc_pressed:
@@ -89,7 +91,7 @@ class InputSimulator:
                     # self._show_termination_message()
                     keyboard.unhook_all()
                     return False
-
+                """
                 # 激活编辑器（点击屏幕中央）
                 screen_width, screen_height = pyautogui.size()
                 x = screen_width // 2
@@ -102,6 +104,7 @@ class InputSimulator:
                 time.sleep(0.05)
                 keyboard.press_and_release('delete')
                 time.sleep(0.05)
+                """
 
             # 使用批量输入
             lines = text.split('\n')

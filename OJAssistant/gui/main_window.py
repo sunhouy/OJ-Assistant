@@ -501,6 +501,17 @@ class EducoderGUI:
         license_link.pack(side=tk.LEFT)
         license_link.bind("<Button-1>", lambda e: webbrowser.open("https://yhsun.cn/educoder/license"))
 
+        # 快捷键说明超链接
+        license_link = tk.Label(
+            links_frame,
+            text="",
+            fg="blue",
+            cursor="hand2",
+            font=("TkDefaultFont", 10)
+        )
+        license_link.pack(side=tk.LEFT)
+        license_link.bind("<Button-1>", lambda e: webbrowser.open("https://yhsun.cn/educoder/"))
+
         # 启动日志处理
         self.process_log_queue()
 

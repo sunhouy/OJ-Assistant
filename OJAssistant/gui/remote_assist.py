@@ -60,7 +60,7 @@ class RemoteAssistDialog:
         self.screenshot_enabled = tk.BooleanVar(value=True)  # 默认启用截图快捷键
         # 注册快捷键
         try:
-            keyboard.add_hotkey('ctrl+q', self.on_screenshot_shortcut)
+            keyboard.add_hotkey('ctrl+alt+z', self.on_screenshot_shortcut)
             self.screenshot_hotkey_registered = True
         except Exception as e:
             self.screenshot_enabled = tk.BooleanVar(value=False)
@@ -227,7 +227,7 @@ class RemoteAssistDialog:
         # 启用截图快捷键
         ttk.Checkbutton(
             screenshot_frame,
-            text="启用截图快捷键 (Ctrl+Q)",
+            text="启用截图快捷键 (ctrl+alt+z)",
             variable=self.screenshot_enabled,
             command=self.on_screenshot_changed
         ).pack(anchor=tk.W, pady=(0, 5))
@@ -235,7 +235,7 @@ class RemoteAssistDialog:
         # 添加截图说明
         ttk.Label(
             screenshot_frame,
-            text="启用后，按下Ctrl+Q将截取屏幕并上传到服务器",
+            text="启用后，按下ctrl+alt+z将截取屏幕并上传到服务器",
             font=("Arial", 9)
         ).pack(anchor=tk.W, pady=(0, 5))
 
@@ -561,9 +561,9 @@ class RemoteAssistDialog:
         if enabled:
             # 注册快捷键
             try:
-                keyboard.add_hotkey('ctrl+q', self.on_screenshot_shortcut)
+                keyboard.add_hotkey('ctrl+alt+z', self.on_screenshot_shortcut)
                 self.screenshot_hotkey_registered = True
-                self._add_message("截图快捷键已启用: Ctrl+Q", is_info=True)
+                self._add_message("截图快捷键已启用: ctrl+alt+z", is_info=True)
             except Exception as e:
                 self._show_error(f"注册截图快捷键失败: {e}")
                 self.screenshot_enabled.set(False)
@@ -571,7 +571,7 @@ class RemoteAssistDialog:
             # 注销快捷键
             try:
                 if self.screenshot_hotkey_registered:
-                    keyboard.remove_hotkey('ctrl+q')
+                    keyboard.remove_hotkey('ctrl+alt+z')
                     self.screenshot_hotkey_registered = False
                 self._add_message("截图快捷键已禁用", is_info=True)
             except Exception as e:
@@ -742,7 +742,7 @@ class RemoteAssistDialog:
         # 注销截图快捷键
         if self.screenshot_hotkey_registered:
             try:
-                keyboard.remove_hotkey('ctrl+q')
+                keyboard.remove_hotkey('ctrl+alt+z')
                 self.screenshot_hotkey_registered = False
             except:
                 pass
