@@ -3,11 +3,15 @@
 .vscode/
 .idea/
 .git/
+
 build/
 dist/
 test/
 Output/
+OJAssistant/__pycache__
 
 web/educoder/css
 web/educoder/images
 web/educoder/static
+
+OJ助手.spec

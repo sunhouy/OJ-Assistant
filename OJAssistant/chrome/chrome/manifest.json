@@ -12,13 +12,9 @@
   },
 
   "action": {
-    "default_title": "OJ助手",
-    "default_icon": {
-      "16": "icons/16.ico",
-      "32": "icons/32.ico",
-      "48": "icons/48.ico"
-    }
-  },
+  "default_title": "OJ助手",
+  "default_icon": "icons/icon.png"
+   },
 
   "permissions": [
     "activeTab",

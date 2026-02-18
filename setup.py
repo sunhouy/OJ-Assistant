@@ -2,9 +2,9 @@ import PyInstaller.__main__
 
 def main():
     args = [
-        r'C:\Users\sunhouyun\Desktop\Educoder\EducoderAssistant\main.py',
+        r'C:\Users\sunhouyun\Desktop\Educoder\OJAssistant\main.py',
         '--onefile',
-        '--name=Educoder助手',
+        '--name=OJ助手',
         '--icon=app.png',
         '--windowed',
         '--clean',

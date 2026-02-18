@@ -41,8 +41,8 @@ class EducoderFloatingAssistant {
 
         await this.autoConnect();
 
-        // 默认隐藏所有界面元素
-        this.hide();
+        // 默认显示所有界面元素
+        this.show();
         this.hideTopTipOverlay();
     }
 
