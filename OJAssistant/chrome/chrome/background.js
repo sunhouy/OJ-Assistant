@@ -1,6 +1,6 @@
 // 后台脚本
 chrome.runtime.onInstalled.addListener(() => {
-    console.log('Educoder自动化助手扩展已安装');
+    console.log('OJ自动化助手扩展已安装');
     
     chrome.storage.local.get(['serverUrl'], (result) => {
         if (!result.serverUrl) {

@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Educoder助手 | chrome拓展安装指引</title>
+    
+    <!-- 本地Font Awesome CSS -->
+    <style>
+        /* Inter字体定义 - 简化版 */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        }
+        
+        /* Font Awesome图标字体 */
+        @font-face {
+            font-family: 'FontAwesome';
+            src: url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2') format('woff2');
+            font-weight: normal;
+            font-style: normal;
+        }
+        
+        .fas {
+            font-family: 'FontAwesome';
+            font-weight: 900;
+        }
+        
+        .fa-arrow-left:before { content: "\f060"; }
+        .fa-arrow-right:before { content: "\f061"; }
+        .fa-check:before { content: "\f00c"; }
+        .fa-expand:before { content: "\f065"; }
+        .fa-times:before { content: "\f00d"; }
+        .fa-search-plus:before { content: "\f00e"; }
+        .fa-download:before { content: "\f019"; }
+        .fa-puzzle-piece:before { content: "\f12e"; }
+        .fa-external-link-alt:before { content: "\f35d"; }
+        .fa-copy:before { content: "\f0c5"; }
+        .fa-redo:before { content: "\f01e"; }
+    </style>
+    
+    <style>
+        :root {
+            --primary-color: #3a86ff;
+            --primary-dark: #2667cc;
+            --primary-light: #e6f0ff;
+            --secondary-color: #8338ec;
+            --accent-color: #ff006e;
+            --success-color: #06d6a0;
+            --dark-bg: #0a0e17;
+            --darker-bg: #050811;
+            --card-bg: #121826;
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --text-muted: #64748b;
+            --border-color: #2d3748;
+            --gradient-primary: linear-gradient(135deg, #3a86ff 0%, #8338ec 100%);
+            --gradient-secondary: linear-gradient(135deg, #ff006e 0%, #fb5607 100%);
+            --transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+            --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            --shadow-primary: 0 10px 30px rgba(58, 134, 255, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background-color: var(--darker-bg);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* 导航栏 */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 5%;
+            background-color: rgba(10, 14, 23, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: var(--transition);
+        }
+
+        .navbar.scrolled {
+            padding: 1rem 5%;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+        }
+
+        .logo-icon {
+            font-size: 2rem;
+            color: var(--primary-color);
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .logo-text {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(90deg, #3a86ff, #8338ec);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            padding: 0.8rem 1.8rem;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: var(--transition);
+            border: none;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--gradient-primary);
+            color: white;
+            box-shadow: var(--shadow-primary);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 35px rgba(58, 134, 255, 0.4);
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            color: var(--text-primary);
+            border: 2px solid var(--border-color);
+        }
+
+        .btn-outline:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+            border-color: var(--primary-color);
+        }
+
+        /* 安装指引主容器 */
+        .install-guide {
+            max-width: 1200px;
+            margin: 120px auto 60px;
+            padding: 0 20px;
+        }
+
+        .guide-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .guide-header h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(90deg, #3a86ff, #8338ec);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            line-height: 1.1;
+        }
+
+        .guide-header p {
+            font-size: 1.3rem;
+            color: var(--text-secondary);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        /* 进度指示器 - 修复对齐问题 */
+        .progress-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 50px;
+            position: relative;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .progress-container::before {
+            content: '';
+            position: absolute;
+            top: 17px;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background-color: var(--border-color);
+            z-index: 1;
+        }
+
+        .progress-line {
+            position: absolute;
+            top: 17px;
+            left: 0;
+            height: 4px;
+            background: var(--gradient-primary);
+            z-index: 2;
+            transition: width 0.5s ease;
+        }
+
+        .step-indicator {
+            position: relative;
+            z-index: 3;
+            text-align: center;
+            width: 80px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 70px;
+        }
+
+        .step-circle {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background-color: var(--border-color);
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            margin-bottom: 10px;
+            transition: var(--transition);
+            border: 3px solid var(--darker-bg);
+            flex-shrink: 0;
+        }
+
+        .step-circle.active {
+            background: var(--gradient-primary);
+            color: white;
+            transform: scale(1.1);
+            box-shadow: 0 0 0 8px rgba(58, 134, 255, 0.2);
+        }
+
+        .step-circle.completed {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .step-label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            line-height: 1.3;
+            min-height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .step-label.active {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        /* 步骤内容 */
+        .step-container {
+            display: none;
+            background-color: var(--card-bg);
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: var(--shadow-lg);
+            margin-bottom: 40px;
+        }
+
+        .step-container.active {
+            display: block;
+        }
+
+        .step-header {
+            padding: 30px 40px 0;
+        }
+
+        .step-number {
+            display: inline-block;
+            background: var(--gradient-primary);
+            color: white;
+            font-weight: 700;
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+
+        .step-title {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            line-height: 1.2;
+        }
+
+        .step-description {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            line-height: 1.7;
+            margin-bottom: 30px;
+        }
+
+        /* 新增功能按钮样式 */
+        .action-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .action-btn {
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: var(--transition);
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+
+        .action-btn-primary {
+            background: var(--gradient-primary);
+            color: white;
+            box-shadow: var(--shadow-primary);
+        }
+
+        .action-btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 35px rgba(58, 134, 255, 0.4);
+        }
+
+        .action-btn-secondary {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            border: 2px solid var(--border-color);
+        }
+
+        .action-btn-secondary:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-color: var(--primary-color);
+            transform: translateY(-3px);
+        }
+
+        /* 目录路径输入框样式 */
+        .directory-container {
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 25px;
+            border: 1px solid var(--border-color);
+        }
+
+        .directory-input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .directory-input {
+            flex: 1;
+            padding: 12px 16px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: monospace;
+            font-size: 0.95rem;
+        }
+
+        .directory-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(58, 134, 255, 0.2);
+        }
+
+        .copy-btn {
+            padding: 12px 24px;
+            background: var(--gradient-primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: var(--transition);
+            white-space: nowrap;
+        }
+
+        .copy-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        .directory-note {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+
+        .code {
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+            color: var(--primary-color);
+        }
+
+        /* 图片区域 - 放大功能 */
+        .step-image-section {
+            padding: 20px 40px 40px;
+        }
+
+        .image-container {
+            position: relative;
+            border-radius: 15px;
+            overflow: hidden;
+            background-color: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            transition: var(--transition);
+            max-height: 700px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .image-container:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 10px 30px rgba(58, 134, 255, 0.2);
+        }
+
+        .step-image {
+            width: 100%;
+            height: auto;
+            max-height: 600px;
+            object-fit: contain;
+            display: block;
+            transition: transform 0.3s ease;
+        }
+
+        .image-container:hover .step-image {
+            transform: scale(1.02);
+        }
+
+        .image-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .image-container:hover .image-overlay {
+            opacity: 1;
+        }
+
+        .zoom-indicator {
+            background: rgba(58, 134, 255, 0.8);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 50px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transform: translateY(10px);
+            transition: transform 0.3s ease;
+        }
+
+        .image-container:hover .zoom-indicator {
+            transform: translateY(0);
+        }
+
+        /* 图片模态框 - 放大查看 */
+        .image-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            max-width: 90%;
+            max-height: 90%;
+            position: relative;
+        }
+
+        .modal-image {
+            width: 100%;
+            height: auto;
+            max-height: 85vh;
+            object-fit: contain;
+            border-radius: 10px;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            color: white;
+            font-size: 2.5rem;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .close-modal:hover {
+            color: var(--primary-color);
+        }
+
+        .modal-caption {
+            color: white;
+            text-align: center;
+            margin-top: 20px;
+            font-size: 1.1rem;
+        }
+
+        /* 导航按钮 */
+        .step-navigation {
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px 40px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .nav-btn {
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: var(--transition);
+            border: none;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 160px;
+            justify-content: center;
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .nav-btn-prev {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            border: 2px solid var(--border-color);
+        }
+
+        .nav-btn-prev:not(:disabled):hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-color: var(--primary-color);
+            transform: translateY(-3px);
+        }
+
+        .nav-btn-next {
+            background: var(--gradient-primary);
+            color: white;
+            box-shadow: var(--shadow-primary);
+        }
+
+        .nav-btn-next:not(:disabled):hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 35px rgba(58, 134, 255, 0.4);
+        }
+
+        .nav-btn-complete {
+            background: var(--gradient-secondary);
+        }
+
+        /* 完成步骤特殊样式 */
+        .step-complete {
+            text-align: center;
+            padding: 50px 40px;
+        }
+
+        .completion-icon {
+            font-size: 5rem;
+            background: linear-gradient(135deg, #06d6a0, #3a86ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 30px;
+            display: inline-block;
+        }
+
+        .completion-title {
+            font-size: 2.8rem;
+            font-weight: 800;
+            margin-bottom: 20px;
+            background: linear-gradient(90deg, #06d6a0, #3a86ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .completion-message {
+            font-size: 1.3rem;
+            color: var(--text-secondary);
+            max-width: 700px;
+            margin: 0 auto 40px;
+            line-height: 1.7;
+        }
+
+        .completion-actions {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* 页脚 */
+        footer {
+            padding: 4rem 5% 2rem;
+            background-color: var(--darker-bg);
+            border-top: 1px solid var(--border-color);
+            margin-top: 60px;
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .footer-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+            text-decoration: none;
+        }
+
+        .footer-logo-text {
+            font-size: 1.8rem;
+            font-weight: 800;
+            background: linear-gradient(90deg, #3a86ff, #8338ec);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .footer-copyright {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            max-width: 700px;
+            margin-top: 2rem;
+            line-height: 1.6;
+        }
+
+        .step-counter {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            margin-top: 20px;
+            font-weight: 500;
+        }
+
+        .step-counter .current {
+            color: var(--primary-color);
+            font-weight: 700;
+        }
+
+        .step-counter .total {
+            color: var(--text-secondary);
+        }
+
+        /* 工具提示 */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 180px;
+            background-color: var(--card-bg);
+            color: var(--text-primary);
+            text-align: center;
+            border-radius: 6px;
+            padding: 8px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            border: 1px solid var(--border-color);
+            font-size: 0.85rem;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .tooltip .tooltiptext::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: var(--card-bg) transparent transparent transparent;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .install-guide {
+                margin-top: 100px;
+            }
+            
+            .guide-header h1 {
+                font-size: 2.5rem;
+            }
+            
+            .guide-header p {
+                font-size: 1.1rem;
+            }
+            
+            .progress-container {
+                max-width: 100%;
+                align-items: flex-start;
+            }
+            
+            .step-indicator {
+                width: 60px;
+                min-height: 65px;
+            }
+            
+            .step-circle {
+                width: 30px;
+                height: 30px;
+                font-size: 0.9rem;
+            }
+            
+            .step-label {
+                font-size: 0.8rem;
+                min-height: 40px;
+            }
+            
+            .step-header {
+                padding: 25px 25px 0;
+            }
+            
+            .step-title {
+                font-size: 1.8rem;
+            }
+            
+            .step-image-section {
+                padding: 20px 25px 30px;
+            }
+            
+            .image-container {
+                max-height: 400px;
+            }
+            
+            .step-image {
+                max-height: 350px;
+            }
+            
+            .directory-input-group {
+                flex-direction: column;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
+            
+            .action-btn, .copy-btn {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .nav-btn {
+                padding: 14px 24px;
+                min-width: 140px;
+                font-size: 1rem;
+            }
+            
+            .step-complete {
+                padding: 40px 25px;
+            }
+            
+            .completion-title {
+                font-size: 2.2rem;
+            }
+            
+            .completion-actions {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .progress-container {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 20px;
+            }
+            
+            .progress-container::before {
+                display: none;
+            }
+            
+            .progress-line {
+                display: none;
+            }
+            
+            .step-indicator {
+                width: 100px;
+                min-height: auto;
+            }
+            
+            .step-label {
+                min-height: auto;
+            }
+            
+            .nav-btn {
+                min-width: 120px;
+                padding: 12px 20px;
+            }
+            
+            .step-navigation {
+                flex-direction: column;
+                gap: 15px;
+                align-items: center;
+            }
+            
+            .nav-btn {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 安装指引主容器 -->
+    <main class="install-guide">
+        <div class="guide-header">
+            <h1>chrome拓展安装指引</h1>
+            <p>仅需简单5步即可完成chrome拓展安装，请您按照指引操作</p>
+        </div>
+        
+        <!-- 进度指示器 - 5步 -->
+        <div class="progress-container">
+            <div class="progress-line" id="progressLine"></div>
+            
+            <div class="step-indicator">
+                <div class="step-circle active" data-step="1">1</div>
+                <div class="step-label active">打开拓展管理</div>
+            </div>
+            
+            <div class="step-indicator">
+                <div class="step-circle" data-step="2">2</div>
+                <div class="step-label">开发者模式</div>
+            </div>
+            
+            <div class="step-indicator">
+                <div class="step-circle" data-step="3">3</div>
+                <div class="step-label">加载解压缩拓展</div>
+            </div>
+            
+            <div class="step-indicator">
+                <div class="step-circle" data-step="4">4</div>
+                <div class="step-label">选择拓展目录</div>
+            </div>
+            
+            <div class="step-indicator">
+                <div class="step-circle" data-step="5">5</div>
+                <div class="step-label">完成</div>
+            </div>
+        </div>
+        
+        <!-- 步骤1 - 新增一键跳转功能 -->
+        <div class="step-container active" id="step1">
+            <div class="step-header">
+                <div class="step-number">步骤 1/5</div>
+                <h2 class="step-title">打开拓展管理</h2>
+                <p class="step-description">
+                    点击浏览器导航栏右侧"..."按钮 → 选择"扩展" → 管理扩展程序。或者直接在地址栏输入：<code class="code">chrome://extensions/</code> 快速访问。
+                </p>
+                
+                <!-- 新增一键跳转按钮 -->
+                <div class="action-buttons">
+                    <button id="openExtensionsBtn" class="action-btn action-btn-primary">
+                        <i class="fas fa-external-link-alt"></i> 一键打开拓展管理页面
+                    </button>
+                    <div class="tooltip">
+                        <button class="action-btn action-btn-secondary" onclick="copyToClipboard('chrome://extensions/', 'extensions')">
+                            <i class="fas fa-copy"></i> 复制链接
+                        </button>
+                        <span class="tooltiptext">复制 chrome://extensions/ 到剪贴板</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="step-image-section">
+                <div class="image-container" onclick="openImageModal('images/chrome_1.png', '打开拓展管理')">
+                    <img src="images/chrome_1.png" alt="步骤1示意图" class="step-image" id="stepImage1">
+                    <div class="image-overlay">
+                        <div class="zoom-indicator">
+                            <i class="fas fa-search-plus"></i> 点击放大图片
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 步骤2 -->
+        <div class="step-container" id="step2">
+            <div class="step-header">
+                <div class="step-number">步骤 2/5</div>
+                <h2 class="step-title">启用开发者模式</h2>
+                <p class="step-description">
+                    在扩展页面右上角找到"开发者模式"开关，点击将其开启。启用开发者模式后，您将看到"加载解压缩的扩展"按钮出现。
+                </p>
+            </div>
+            
+            <div class="step-image-section">
+                <div class="image-container" onclick="openImageModal('images/chrome_2.png', '启用开发者模式')">
+                    <img src="images/chrome_2.png" alt="步骤2示意图" class="step-image" id="stepImage2">
+                    <div class="image-overlay">
+                        <div class="zoom-indicator">
+                            <i class="fas fa-search-plus"></i> 点击放大图片
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 步骤3 -->
+        <div class="step-container" id="step3">
+            <div class="step-header">
+                <div class="step-number">步骤 3/5</div>
+                <h2 class="step-title">加载解压缩的拓展</h2>
+                <p class="step-description">
+                    点击"加载解压缩的扩展"按钮，系统会弹出文件选择对话框，准备选择拓展目录。
+                </p>
+            </div>
+            
+            <div class="step-image-section">
+                <div class="image-container" onclick="openImageModal('images/chrome_3.png', '加载解压缩的扩展')">
+                    <img src="images/chrome_3.png" alt="步骤3示意图" class="step-image" id="stepImage3">
+                    <div class="image-overlay">
+                        <div class="zoom-indicator">
+                            <i class="fas fa-search-plus"></i> 点击放大图片
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 步骤4 - 新增目录路径输入和复制功能 -->
+        <div class="step-container" id="step4">
+            <div class="step-header">
+                <div class="step-number">步骤 4/5</div>
+                <h2 class="step-title">选择拓展目录</h2>
+                <p class="step-description">
+                    在弹出的文件选择对话框中，导航到拓展所在目录，选择该文件夹后点击"选择文件夹"按钮。
+                </p>
+                
+                <!-- 新增目录路径输入和复制功能 -->
+                <div class="directory-container">
+                    <h3 style="margin-bottom: 15px; color: var(--text-primary); font-size: 1.2rem;">拓展目录路径：</h3>
+                    <div class="directory-input-group">
+                        <input type="text" id="directoryPath" class="directory-input" readonly value="C:\Program Files\Educoder Assistant\chrome">
+                        <button id="copyDirectoryBtn" class="copy-btn">
+                            <i class="fas fa-copy"></i> 复制路径
+                        </button>
+                    </div>
+                    <!--
+                    <p class="directory-note">
+                        提示：您也可以通过URL参数指定目录，例如访问 <code class="code">/chrome.html?file=C:\MyExtension</code>
+                    </p>
+                    -->
+                </div>
+            </div>
+            
+            <div class="step-image-section">
+                <div class="image-container" onclick="openImageModal('images/chrome_4.png', '选择拓展目录')">
+                    <img src="images/chrome_4.png" alt="步骤4示意图" class="step-image" id="stepImage4">
+                    <div class="image-overlay">
+                        <div class="zoom-indicator">
+                            <i class="fas fa-search-plus"></i> 点击放大图片
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 步骤5 - 完成 -->
+        <div class="step-container" id="step5">
+            <div class="step-complete">
+                <div class="completion-icon">
+                    <i class="fas fa-check"></i>
+                </div>
+                <h2 class="completion-title">安装完成！</h2>
+                <p class="completion-message">
+                    恭喜！Educoder助手拓展已成功安装。您现在可以打开头歌答题页面开始体验本应用！<br>
+                    <strong>重要提示：</strong> 在使用拓展功能时，请确保桌面应用已开启。
+                </p>
+                
+                <div class="step-image-section">
+                    <div class="image-container" onclick="openImageModal('images/chrome_5.png', '拓展安装完成')">
+                        <img src="images/chrome_5.png" alt="完成示意图" class="step-image" id="stepImage5">
+                        <div class="image-overlay">
+                            <div class="zoom-indicator">
+                                <i class="fas fa-search-plus"></i> 点击放大图片
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="completion-actions">
+                    <a href="index.html" class="btn btn-primary">
+                        <i class="fas fa-arrow-left"></i> 返回主页
+                    </a>
+                    <button class="btn btn-outline" onclick="restartGuide()">
+                        <i class="fas fa-redo"></i> 重新查看指引
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 步骤计数器 -->
+        <div class="step-counter">
+            步骤 <span class="current" id="currentStep">1</span> / <span class="total" id="totalSteps">5</span>
+        </div>
+        
+        <!-- 导航按钮 -->
+        <div class="step-navigation">
+            <button class="nav-btn nav-btn-prev" id="prevBtn" disabled>
+                <i class="fas fa-arrow-left"></i> 上一步
+            </button>
+            <button class="nav-btn nav-btn-next" id="nextBtn">
+                下一步 <i class="fas fa-arrow-right"></i>
+            </button>
+        </div>
+    </main>
+    
+    <!-- 图片放大模态框 -->
+    <div class="image-modal" id="imageModal" onclick="closeImageModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <span class="close-modal" onclick="closeImageModal()">&times;</span>
+            <img src="" alt="放大图片" class="modal-image" id="modalImage">
+            <div class="modal-caption" id="modalCaption"></div>
+        </div>
+    </div>
+    
+    <!-- 页脚 -->
+    <footer>
+        <div class="footer-content">
+            <a href="index.html" class="footer-logo">
+                <i class="fas fa-puzzle-piece logo-icon"></i>
+                <span class="footer-logo-text">Educoder助手</span>
+            </a>
+            <div class="footer-copyright">
+                © 2025 Educoder助手 保留所有权利<br>
+                <a href="https://beian.miit.gov.cn/" target="_blank" style="color: var(--text-muted); text-decoration: none;">
+                    京ICP备2025154249号
+                </a>
+            </div>
+        </div>
+    </footer>
+    
+    <script>
+        // 步骤数据 - 5步
+        const steps = [
+            {
+                id: 1,
+                title: "打开拓展管理",
+                description: "点击浏览器导航栏右侧'...'按钮 → 选择'扩展' → 管理扩展程序。或者直接在地址栏输入：chrome://extensions/ 快速访问。",
+                imageSrc: "images/chrome_1.png",
+                imageAlt: "打开拓展管理"
+            },
+            {
+                id: 2,
+                title: "启用开发者模式",
+                description: "在扩展页面右上角找到'开发者模式'开关，点击将其开启。启用开发者模式后，您将看到'加载解压缩的扩展'按钮出现。",
+                imageSrc: "images/chrome_2.png",
+                imageAlt: "启用开发者模式"
+            },
+            {
+                id: 3,
+                title: "加载解压缩的拓展",
+                description: "点击'加载解压缩的扩展'按钮，系统会弹出文件选择对话框，准备选择拓展目录。",
+                imageSrc: "images/chrome_3.png",
+                imageAlt: "加载解压缩的扩展"
+            },
+            {
+                id: 4,
+                title: "选择拓展目录",
+                description: "在弹出的文件选择对话框中，导航到拓展所在目录，选择该文件夹后点击'选择文件夹'按钮。",
+                imageSrc: "images/chrome_4.png",
+                imageAlt: "选择拓展目录"
+            },
+            {
+                id: 5,
+                title: "完成安装",
+                description: "恭喜！Educoder助手拓展已成功安装。您现在可以打开头歌答题页面开始体验本应用！重要提示：在使用拓展功能时，请确保桌面应用已开启。",
+                imageSrc: "images/chrome_5.png",
+                imageAlt: "拓展安装完成"
+            }
+        ];
+        
+        // DOM元素
+        const stepContainers = document.querySelectorAll('.step-container');
+        const stepCircles = document.querySelectorAll('.step-circle');
+        const stepLabels = document.querySelectorAll('.step-label');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const currentStepEl = document.getElementById('currentStep');
+        const progressLine = document.getElementById('progressLine');
+        const totalSteps = steps.length;
+        
+        // 新增功能元素
+        const openExtensionsBtn = document.getElementById('openExtensionsBtn');
+        const directoryPathInput = document.getElementById('directoryPath');
+        const copyDirectoryBtn = document.getElementById('copyDirectoryBtn');
+        
+        // 图片模态框元素
+        const imageModal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+        const modalCaption = document.getElementById('modalCaption');
+        
+        // 当前步骤索引（从0开始）
+        let currentStepIndex = 0;
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 设置总步骤数
+            document.getElementById('totalSteps').textContent = totalSteps;
+            
+            // 更新进度条
+            updateProgress();
+            
+            // 监听导航栏滚动
+            const navbar = document.querySelector('.navbar');
+            if (navbar) {
+                window.addEventListener('scroll', function() {
+                    if (window.scrollY > 50) {
+                        navbar.classList.add('scrolled');
+                    } else {
+                        navbar.classList.remove('scrolled');
+                    }
+                });
+            }
+            
+            // 预加载所有步骤图片
+            preloadImages();
+            
+            // 检查URL参数，设置目录路径
+            checkUrlParameters();
+            
+            // 设置按钮事件监听
+            setupEventListeners();
+        });
+        
+        // 设置事件监听器
+        function setupEventListeners() {
+            // 一键打开拓展管理页面
+            if (openExtensionsBtn) {
+                openExtensionsBtn.addEventListener('click', function() {
+                    // 尝试在新标签页打开chrome://extensions/
+                    try {
+                        window.open('chrome://extensions/', '_blank');
+                        
+                        // 如果被浏览器阻止，显示提示
+                        setTimeout(() => {
+                            const isBlocked = !window.open('chrome://extensions/');
+                            if (isBlocked) {
+                                showNotification('请允许弹出窗口，或手动在地址栏输入：chrome://extensions/');
+                            }
+                        }, 100);
+                    } catch (e) {
+                        console.log('无法直接打开chrome://协议，请手动输入地址');
+                        showNotification('请在chrome浏览器地址栏手动输入：chrome://extensions/');
+                    }
+                });
+            }
+            
+            // 复制目录路径
+            if (copyDirectoryBtn) {
+                copyDirectoryBtn.addEventListener('click', function() {
+                    copyToClipboard(directoryPathInput.value, 'directory');
+                });
+            }
+        }
+        
+        // 检查URL参数
+        function checkUrlParameters() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const filePath = urlParams.get('file');
+            
+            if (filePath && directoryPathInput) {
+                directoryPathInput.value = filePath;
+            }
+        }
+        
+        // 复制文本到剪贴板
+        function copyToClipboard(text, type = 'text') {
+            navigator.clipboard.writeText(text).then(() => {
+                let message = '已复制到剪贴板！';
+                if (type === 'extensions') {
+                    message = 'chrome://extensions/ 已复制到剪贴板！';
+                } else if (type === 'directory') {
+                    message = '目录路径已复制到剪贴板！';
+                }
+                
+                showNotification(message);
+                
+                // 如果是复制目录路径，临时改变按钮状态
+                if (type === 'directory' && copyDirectoryBtn) {
+                    const originalText = copyDirectoryBtn.innerHTML;
+                    copyDirectoryBtn.innerHTML = '<i class="fas fa-check"></i> 已复制';
+                    copyDirectoryBtn.style.background = 'var(--success-color)';
+                    
+                    setTimeout(() => {
+                        copyDirectoryBtn.innerHTML = originalText;
+                        copyDirectoryBtn.style.background = '';
+                    }, 2000);
+                }
+            }).catch(err => {
+                console.error('复制失败: ', err);
+                showNotification('复制失败，请手动选择文本复制');
+            });
+        }
+        
+        // 显示通知
+        function showNotification(message) {
+            // 检查是否已有通知
+            let notification = document.querySelector('.notification');
+            if (notification) {
+                notification.remove();
+            }
+            
+            // 创建通知元素
+            notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = message;
+            notification.style.cssText = `
+                position: fixed;
+                top: 100px;
+                right: 20px;
+                background: var(--gradient-primary);
+                color: white;
+                padding: 15px 25px;
+                border-radius: 10px;
+                z-index: 9999;
+                box-shadow: var(--shadow-lg);
+                animation: slideIn 0.3s ease;
+                font-weight: 600;
+                max-width: 300px;
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // 3秒后自动移除
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 3000);
+            
+            // 添加CSS动画
+            if (!document.querySelector('#notification-styles')) {
+                const style = document.createElement('style');
+                style.id = 'notification-styles';
+                style.textContent = `
+                    @keyframes slideIn {
+                        from { transform: translateX(100%); opacity: 0; }
+                        to { transform: translateX(0); opacity: 1; }
+                    }
+                    @keyframes slideOut {
+                        from { transform: translateX(0); opacity: 1; }
+                        to { transform: translateX(100%); opacity: 0; }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+        }
+        
+        // 预加载图片函数
+        function preloadImages() {
+            steps.forEach(step => {
+                const img = new Image();
+                img.src = step.imageSrc;
+            });
+        }
+        
+        // 更新进度指示器和步骤内容
+        function updateProgress() {
+            // 更新进度线
+            const progressPercentage = (currentStepIndex / (totalSteps - 1)) * 100;
+            progressLine.style.width = `${progressPercentage}%`;
+            
+            // 更新步骤圆圈和标签
+            stepCircles.forEach((circle, index) => {
+                circle.classList.remove('active', 'completed');
+                
+                if (index < currentStepIndex) {
+                    circle.classList.add('completed');
+                } else if (index === currentStepIndex) {
+                    circle.classList.add('active');
+                }
+            });
+            
+            stepLabels.forEach((label, index) => {
+                label.classList.remove('active');
+                if (index === currentStepIndex) {
+                    label.classList.add('active');
+                }
+            });
+            
+            // 更新步骤内容显示
+            stepContainers.forEach((container, index) => {
+                if (index === currentStepIndex) {
+                    container.classList.add('active');
+                } else {
+                    container.classList.remove('active');
+                }
+            });
+            
+            // 更新步骤计数器
+            currentStepEl.textContent = currentStepIndex + 1;
+            
+            // 更新按钮状态
+            prevBtn.disabled = currentStepIndex === 0;
+            
+            if (currentStepIndex === totalSteps - 1) {
+                nextBtn.innerHTML = '安装完成 <i class="fas fa-check"></i>';
+                nextBtn.classList.remove('nav-btn-next');
+                nextBtn.classList.add('nav-btn-complete');
+            } else {
+                nextBtn.innerHTML = '下一步 <i class="fas fa-arrow-right"></i>';
+                nextBtn.classList.remove('nav-btn-complete');
+                nextBtn.classList.add('nav-btn-next');
+            }
+        }
+        
+        // 下一步按钮点击事件
+        nextBtn.addEventListener('click', function() {
+            if (currentStepIndex < totalSteps - 1) {
+                currentStepIndex++;
+                updateProgress();
+                
+                // 滚动到步骤容器顶部
+                document.querySelector('.step-container.active').scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            } else {
+                // 安装完成
+                showNotification('恭喜！Educoder助手拓展已成功安装。您现在可以开始使用本应用了！');
+            }
+        });
+        
+        // 上一步按钮点击事件
+        prevBtn.addEventListener('click', function() {
+            if (currentStepIndex > 0) {
+                currentStepIndex--;
+                updateProgress();
+                
+                // 滚动到步骤容器顶部
+                document.querySelector('.step-container.active').scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }
+        });
+        
+        // 步骤指示器点击事件
+        stepCircles.forEach((circle, index) => {
+            circle.addEventListener('click', function() {
+                if (index <= currentStepIndex + 1) { // 允许跳转到已完成或下一步
+                    currentStepIndex = index;
+                    updateProgress();
+                    
+                    // 滚动到步骤容器顶部
+                    document.querySelector('.step-container.active').scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+        
+        // 图片放大功能
+        function openImageModal(imageSrc, caption) {
+            modalImage.src = imageSrc;
+            modalImage.alt = caption;
+            modalCaption.textContent = caption;
+            imageModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden'; // 防止背景滚动
+        }
+        
+        function closeImageModal() {
+            imageModal.style.display = 'none';
+            document.body.style.overflow = 'auto'; // 恢复背景滚动
+        }
+        
+        // 点击模态框背景关闭
+        imageModal.addEventListener('click', function(e) {
+            if (e.target === imageModal) {
+                closeImageModal();
+            }
+        });
+        
+        // ESC键关闭模态框
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && imageModal.style.display === 'flex') {
+                closeImageModal();
+            }
+        });
+        
+        // 重新查看指引
+        function restartGuide() {
+            currentStepIndex = 0;
+            updateProgress();
+            
+            // 滚动到顶部
+            document.querySelector('.step-container.active').scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+        }
+        
+        // 图片加载失败处理
+        document.querySelectorAll('.step-image').forEach(img => {
+            img.addEventListener('error', function() {
+                this.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="400" height="300" fill="%23121826"/><text x="200" y="150" font-family="Arial" font-size="18" fill="%2364748b" text-anchor="middle">图片加载失败，请检查路径</text></svg>';
+                this.alt = '图片加载失败';
+            });
+        });
+    </script>
+</body>
+</html>

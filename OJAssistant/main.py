@@ -63,7 +63,7 @@ def main():
 
 
 if __name__ == "__main__":
-    app_name = "Educoder助手"
+    app_name = "OJ助手"
     # path_to_exe = os.path.abspath(sys.argv[0])
     # set_autostart_windows_registry(app_name, path_to_exe)  # 设置开机自启
     main()

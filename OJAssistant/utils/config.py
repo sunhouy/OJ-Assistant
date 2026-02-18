@@ -17,7 +17,7 @@ class ConfigManager:
         self.appdata_dir = self._get_appdata_dir()
 
         # 确保数据目录存在
-        self.data_dir = os.path.join(self.appdata_dir, "EducoderAssistant")
+        self.data_dir = os.path.join(self.appdata_dir, "OJAssistant")
         os.makedirs(self.data_dir, exist_ok=True)
 
         # 文件路径

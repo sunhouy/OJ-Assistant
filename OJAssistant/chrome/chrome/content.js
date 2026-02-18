@@ -216,7 +216,7 @@ class EducoderFloatingAssistant {
             <div class="ea-header">
                 <div class="ea-title">
                     <span class="ea-icon"></span>
-                    <span>Educoder 助手
+                    <span>OJ 助手
                     <br>
                     <span class='fast-show'>(显示/隐藏快捷键 F4)</span>
                     </span>

@@ -273,7 +273,7 @@ class FloatingTipWindow:
         self.window.withdraw()
 
 
-class EducoderAutoCompleteApp:
+class OJAutoCompleteApp:
     def __init__(self, root):
         self.root = root
         self.root.title("浏览器拓展安装工具")
@@ -912,7 +912,7 @@ class EducoderAutoCompleteApp:
 
 def main():
     root = tk.Tk()
-    app = EducoderAutoCompleteApp(root)
+    app = OJAutoCompleteApp(root)
     root.mainloop()
 
 

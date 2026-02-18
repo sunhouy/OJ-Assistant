@@ -188,7 +188,7 @@ class FirstRunDialog:
         # 副标题
         subtitle_label = ttk.Label(
             title_text_frame,
-            text="为了正常使用 Educoder 助手，您需要安装浏览器扩展插件",
+            text="为了正常使用 OJ 助手，您需要安装浏览器扩展插件",
             style='Subtitle.TLabel'
         )
         subtitle_label.pack(anchor='w', pady=(5, 0))
@@ -205,10 +205,10 @@ class FirstRunDialog:
         )
         why_section.pack(anchor='w', pady=(0, 10))
 
-        why_text = """没有扩展插件，Educoder 助手无法正常工作
+        why_text = """没有扩展插件，OJ 助手无法正常工作
 您可以选择手动安装或自动安装的方式，
 手动安装后，您只需保持本客户端是启动状态，即可在
-您安装拓展的浏览器使用Educoder助手
+您安装拓展的浏览器使用OJ助手
 自动安装的拓展可能需要通过主页的“启动浏览器”启动"""
         why_label = ttk.Label(
             scrollable_frame,

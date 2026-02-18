@@ -40,7 +40,7 @@ LicenseFile=C:\Users\sunhouyun\Desktop\Educoder\license.txt
 ;PrivilegesRequired=lowest
 OutputDir=C:\Users\sunhouyun\Desktop\Educoder\Output
 OutputBaseFilename=Setup
-SetupIconFile=C:\Users\sunhouyun\Desktop\Educoder\app.ico
+SetupIconFile=C:\Users\sunhouyun\Desktop\Educoder\app.png
 SolidCompression=yes
 WizardStyle=modern
 

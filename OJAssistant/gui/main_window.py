@@ -26,7 +26,7 @@ PYSTRAY_AVAILABLE = True
 from utils.extension_setup import main as run_extension_setup
 
 
-class EducoderGUI:
+class OJGUI:
     def __init__(self, root, username, token, machine_code=None, parent_window=None, current_version=None):
         self.remote_assist_dialog = None
         self.root = root
@@ -89,7 +89,7 @@ class EducoderGUI:
         self.language_manager = LanguageManager(self.config_manager, log_callback=self.log)
 
         # 设置窗口属性
-        self.root.title("Educoder助手")
+        self.root.title("OJ助手")
         self.root.geometry("1000x750")
         self.root.resizable(True, True)
 
@@ -610,7 +610,7 @@ class EducoderGUI:
 
         # 创建托盘图标
         image = create_image()
-        self.tray_icon = pystray.Icon("educoder_assistant", image, "Educoder助手", menu)
+        self.tray_icon = pystray.Icon("OJ_assistant", image, "OJ助手", menu)
 
         # 在新线程中运行托盘图标
         self.tray_icon_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
@@ -1094,7 +1094,7 @@ class EducoderGUI:
         try:
             # 导入main.py中的函数
             from main import check_autostart_enabled
-            app_name = "Educoder助手"
+            app_name = "OJ助手"
             is_enabled = check_autostart_enabled(app_name)
             self.autostart_var.set(is_enabled)
             self.log(f"开机自启状态: {'已启用' if is_enabled else '未启用'}")
@@ -1106,7 +1106,7 @@ class EducoderGUI:
         try:
             # 导入main.py中的函数
             from main import set_autostart_windows_registry
-            app_name = "Educoder助手"
+            app_name = "OJ助手"
             path_to_exe = os.path.abspath(sys.argv[0])
             enable = self.autostart_var.get()
 

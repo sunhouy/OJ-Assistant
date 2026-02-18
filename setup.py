@@ -2,7 +2,7 @@ import PyInstaller.__main__
 
 def main():
     args = [
-        'C:\\Users\\sunhouyun\\Desktop\\Educoder\\EducoderAssistant\\main.py',  # 主程序路径
+        r'C:\Users\sunhouyun\Desktop\Educoder\EducoderAssistant\main.py',
         '--onefile',
         '--name=Educoder助手',
         '--icon=app.png',

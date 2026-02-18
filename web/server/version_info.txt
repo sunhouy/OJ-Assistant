@@ -1,0 +1,6 @@
+{
+  "latest_version": "1.0",
+  "update_content": "初始版本",
+  "download_url": "http://yhsun.cn/educoder/win64.exe",
+  "min_version": "1.0"
+}

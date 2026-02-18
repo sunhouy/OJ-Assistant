@@ -12,7 +12,7 @@ class CryptoManager:
     def __init__(self):
         # 使用固定的盐值，这样每次加密结果相同
         # 也可以考虑将盐值与加密数据一起存储
-        self.salt = b'educoder_assistant_salt_2024'
+        self.salt = b'OJ_assistant_salt_2024'
         
     def _derive_key(self, password: str) -> bytes:
         """从密码派生密钥"""

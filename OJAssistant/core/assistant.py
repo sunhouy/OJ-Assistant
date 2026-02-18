@@ -7,7 +7,7 @@ from openai import AsyncOpenAI
 from utils.input_simulator import InputSimulator
 
 
-class EducoderAssistant:
+class OJAssistant:
     def __init__(self, gui, model_info=None):
         self.gui = gui
 
@@ -55,8 +55,8 @@ class EducoderAssistant:
                         try:
                             data = json.loads(message)
 
-                            if data.get('type') == 'educoder_content_auto_input':
-                                await self.handle_educoder_content_auto_input(websocket, data)
+                            if data.get('type') == 'OJ_content_auto_input':
+                                await self.handle_OJ_content_auto_input(websocket, data)
                             elif data.get('type') == 'test_results':
                                 await self.handle_test_results(websocket, data)
                             elif data.get('type') == 'ready_for_input':
@@ -105,7 +105,7 @@ class EducoderAssistant:
         self.current_progress = max(0, min(100, progress))
         self.gui.root.after(0, lambda: self.gui.update_status(f"进度: {self.current_progress}%"))  # 更新GUI状态
 
-    async def handle_educoder_content_auto_input(self, websocket, data):
+    async def handle_OJ_content_auto_input(self, websocket, data):
         """处理题目内容并自动输入"""
         try:
             self.gui.log(f"当前使用语言: {self.current_language.upper()}")

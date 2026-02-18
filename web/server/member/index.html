@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Educoder助手 - 会员开通</title>
+    <style>
+        /* CSS样式 - 全部内嵌 */
+        :root {
+            --primary-color: #4361ee;
+            --primary-dark: #3a56d4;
+            --secondary-color: #4cc9f0;
+            --success-color: #4ade80;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --light-color: #f8fafc;
+            --dark-color: #1e293b;
+            --gray-color: #64748b;
+            --light-gray: #e2e8f0;
+            --border-radius: 10px;
+            --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --box-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.12);
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Microsoft YaHei', sans-serif;
+            line-height: 1.6;
+            color: var(--dark-color);
+            background-color: #f9fafb;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* 头部样式 */
+        .header {
+            background-color: white;
+            padding: 16px 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+
+        .logo i {
+            font-size: 24px;
+        }
+
+        .nav-links a {
+            color: var(--gray-color);
+            text-decoration: none;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: var(--transition);
+        }
+
+        .nav-links a:hover {
+            color: var(--primary-color);
+            background-color: rgba(67, 97, 238, 0.05);
+        }
+
+        /* 主内容区域 */
+        .main-content {
+            flex: 1;
+            padding: 40px 0;
+        }
+
+        .content-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            align-items: start;
+        }
+
+        /* 左侧内容区 */
+        .content-left {
+            padding-top: 20px;
+        }
+
+        .main-title {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--dark-color);
+            margin-bottom: 10px;
+            line-height: 1.2;
+        }
+
+        .subtitle {
+            font-size: 18px;
+            color: var(--gray-color);
+            margin-bottom: 30px;
+        }
+
+        .feature-list {
+            background-color: white;
+            border-radius: var(--border-radius);
+            padding: 24px;
+            margin-bottom: 30px;
+            box-shadow: var(--box-shadow);
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .feature-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .feature-item i {
+            color: var(--success-color);
+            margin-right: 12px;
+            font-size: 18px;
+        }
+
+        .feature-item span {
+            font-weight: 500;
+            font-size: 16px;
+        }
+
+        .pricing-info {
+            background-color: white;
+            border-radius: var(--border-radius);
+            padding: 24px;
+            box-shadow: var(--box-shadow);
+        }
+
+        .pricing-info h3 {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: var(--dark-color);
+        }
+
+        .pricing-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .pricing-card {
+            background-color: #f8fafc;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            border: 1px solid var(--light-gray);
+            transition: var(--transition);
+        }
+
+        .pricing-card:hover {
+            border-color: var(--primary-color);
+        }
+
+        .pricing-card h4 {
+            font-size: 16px;
+            margin-bottom: 8px;
+            color: var(--dark-color);
+        }
+
+        .pricing-card .price {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+
+        .pricing-card p {
+            font-size: 14px;
+            color: var(--gray-color);
+        }
+
+        /* 右侧开通表单 */
+        .content-right {
+            position: sticky;
+            top: 100px;
+        }
+
+        .activation-card {
+            background-color: white;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            box-shadow: var(--box-shadow);
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 24px;
+            text-align: center;
+        }
+
+        .card-header h2 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .card-header p {
+            opacity: 0.9;
+            font-size: 15px;
+        }
+
+        .card-body {
+            padding: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--dark-color);
+        }
+
+        /* 套餐选项 - 修复样式 */
+        .package-options {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .package-option {
+            border: 2px solid var(--light-gray);
+            border-radius: 8px;
+            padding: 16px;
+            cursor: pointer;
+            transition: var(--transition);
+            text-align: center;
+            position: relative;
+            user-select: none;
+        }
+
+        .package-option input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .package-option.selected {
+            border-color: var(--primary-color);
+            background-color: rgba(67, 97, 238, 0.05);
+            box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.1);
+        }
+
+        .package-option:hover:not(.selected) {
+            border-color: var(--primary-color);
+            background-color: rgba(67, 97, 238, 0.02);
+            transform: translateY(-2px);
+        }
+
+        .package-option.selected::after {
+            content: "✓";
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background-color: var(--primary-color);
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .option-content h4 {
+            font-size: 16px;
+            margin-bottom: 8px;
+            color: var(--dark-color);
+        }
+
+        .option-content .price {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 4px;
+        }
+
+        .option-content .duration {
+            font-size: 14px;
+            color: var(--gray-color);
+        }
+
+        /* 提交按钮 */
+        .submit-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(to right, var(--primary-color), var(--primary-dark));
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .submit-btn:hover {
+            background: linear-gradient(to right, var(--primary-dark), #2f46c4);
+            box-shadow: 0 6px 20px rgba(67, 97, 238, 0.3);
+        }
+
+        .submit-btn:active {
+            transform: translateY(2px);
+        }
+
+        .submit-btn:disabled {
+            background: var(--light-gray);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .form-hint {
+            font-size: 14px;
+            color: var(--gray-color);
+            text-align: center;
+            margin-top: 12px;
+        }
+
+        /* 结果消息 */
+        .result-message {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .result-message.success {
+            background-color: rgba(76, 217, 100, 0.1);
+            border: 1px solid var(--success-color);
+            color: #0a5c1f;
+        }
+
+        .result-message.error {
+            background-color: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--danger-color);
+            color: #991b1b;
+        }
+
+        .result-message.info {
+            background-color: rgba(67, 97, 238, 0.1);
+            border: 1px solid var(--primary-color);
+            color: var(--primary-dark);
+        }
+
+        .result-message.show {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        /* 卡片页脚 */
+        .card-footer {
+            padding: 24px 30px;
+            background-color: #f8fafc;
+            border-top: 1px solid var(--light-gray);
+        }
+
+        .card-footer h3 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: var(--dark-color);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .process-steps {
+            padding-left: 24px;
+            margin-bottom: 20px;
+        }
+
+        .process-steps li {
+            margin-bottom: 10px;
+            color: var(--gray-color);
+        }
+
+        .support-info {
+            background-color: white;
+            border-radius: 8px;
+            padding: 16px;
+            border: 1px solid var(--light-gray);
+        }
+
+        .support-info p {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--dark-color);
+            font-weight: 500;
+        }
+
+        /* 页脚样式 */
+        .footer {
+            background-color: white;
+            padding: 24px 0;
+            border-top: 1px solid var(--light-gray);
+            margin-top: auto;
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .copyright p {
+            color: var(--gray-color);
+            font-size: 14px;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .footer-links a {
+            color: var(--gray-color);
+            text-decoration: none;
+            font-size: 14px;
+            transition: var(--transition);
+        }
+
+        .footer-links a:hover {
+            color: var(--primary-color);
+        }
+
+        /* 模态框样式 */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: var(--border-radius);
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--light-gray);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-size: 20px;
+            color: var(--dark-color);
+        }
+
+        .modal-close {
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--gray-color);
+            background: none;
+            border: none;
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
+
+        .modal-body ol {
+            padding-left: 20px;
+            margin-top: 16px;
+        }
+
+        .modal-body li {
+            margin-bottom: 12px;
+            color: var(--dark-color);
+        }
+
+        /* 动画效果 */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .pulse-animation {
+            animation: pulse 0.3s ease;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 992px) {
+            .content-wrapper {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+            
+            .content-right {
+                position: static;
+            }
+            
+            .main-title {
+                font-size: 28px;
+            }
+            
+            .pricing-cards,
+            .package-options {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header .container {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .pricing-cards,
+            .package-options {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .main-title {
+                font-size: 24px;
+            }
+            
+            .card-body {
+                padding: 20px;
+            }
+            
+            .footer-content {
+                flex-direction: column;
+                gap: 16px;
+                text-align: center;
+            }
+            
+            .footer-links {
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 0 15px;
+            }
+            
+            .card-header {
+                padding: 20px;
+            }
+            
+            .card-header h2 {
+                font-size: 20px;
+            }
+            
+            .submit-btn {
+                padding: 14px;
+                font-size: 16px;
+            }
+            
+            .package-option.selected::after {
+                top: -6px;
+                right: -6px;
+                width: 20px;
+                height: 20px;
+                font-size: 12px;
+            }
+        }
+
+        /* 消息提示样式 */
+        .message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 3000;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+            padding: 15px 20px;
+            min-width: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+        
+        .message.show {
+            transform: translateX(0);
+        }
+        
+        .message-success {
+            border-left: 4px solid #4cc9f0;
+        }
+        
+        .message-error {
+            border-left: 4px solid #f72585;
+        }
+        
+        .message-info {
+            border-left: 4px solid #4361ee;
+        }
+        
+        .message-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .message-content i {
+            font-size: 20px;
+        }
+        
+        .message-success .message-content i {
+            color: #4cc9f0;
+        }
+        
+        .message-error .message-content i {
+            color: #f72585;
+        }
+        
+        .message-info .message-content i {
+            color: #4361ee;
+        }
+        
+        .message-close {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #666;
+            font-size: 16px;
+            padding: 0;
+            margin-left: 15px;
+        }
+    </style>
+    <!-- Font Awesome图标库 -->
+    <link rel="stylesheet" href="https://yhsun.cn/educoder/css/fontawesome/css/all.min.css">
+</head>
+<body>
+    <!-- 简洁的头部 -->
+    <header class="header">
+        <div class="container">
+            <a href="https://yhsun.cn/educoder" class="logo" target="_blank">
+                <i class="fas fa-crown"></i>
+                <span>Educoder助手</span>
+            </a>
+            <div class="nav-links">
+                <a href="https://yhsun.cn/server/activate_member.html" target="_blank">授权码开通</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区域 -->
+    <main class="main-content">
+        <div class="container">
+            <div class="content-wrapper">
+                <!-- 左侧内容区 -->
+                <div class="content-left">
+                    <h1 class="main-title">开通Educoder助手会员</h1>
+                    <p class="subtitle">解锁高级功能，提升编程学习效率</p>
+                    
+                    <div class="feature-list">
+                        <div class="feature-item">
+                            <i class="fas fa-check-circle"></i>
+                            <span>智能自动答题</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-check-circle"></i>
+                            <span>代码自动补全</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-check-circle"></i>
+                            <span>智能纠错与调试</span>
+                        </div>
+                        <div class="feature-item">
+                            <i class="fas fa-check-circle"></i>
+                            <span>高速无限制使用</span>
+                        </div>
+                    </div>
+                    
+                    <div class="pricing-info">
+                        <h3>会员套餐</h3>
+                        <div class="pricing-cards">
+                            <div class="pricing-card">
+                                <h4>天卡</h4>
+                                <div class="price">¥0.1</div>
+                                <p>1天有效期</p>
+                            </div>
+                            <div class="pricing-card">
+                                <h4>周卡</h4>
+                                <div class="price">¥0.5</div>
+                                <p>7天有效期</p>
+                            </div>
+                            <div class="pricing-card">
+                                <h4>月卡</h4>
+                                <div class="price">¥1.9</div>
+                                <p>30天有效期</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 右侧开通表单 -->
+                <div class="content-right">
+                    <div class="activation-card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-shopping-cart"></i> 购买会员</h2>
+                            <p>选择套餐类型，直接跳转支付</p>
+                        </div>
+                        
+                        <div class="card-body">
+                            <form id="activationForm">
+                                <div class="form-group">
+                                    <label>选择套餐</label>
+                                    <div class="package-options">
+                                        <div class="package-option selected" data-package="day">
+                                            <input type="radio" name="package" value="day" checked style="display: none;">
+                                            <div class="option-content">
+                                                <h4>天卡会员</h4>
+                                                <p class="price">¥0.1</p>
+                                                <p class="duration">1天有效期</p>
+                                            </div>
+                                        </div>
+                                        <div class="package-option" data-package="week">
+                                            <input type="radio" name="package" value="week" style="display: none;">
+                                            <div class="option-content">
+                                                <h4>周卡会员</h4>
+                                                <p class="price">¥0.5</p>
+                                                <p class="duration">7天有效期</p>
+                                            </div>
+                                        </div>
+                                        <div class="package-option" data-package="month">
+                                            <input type="radio" name="package" value="month" style="display: none;">
+                                            <div class="option-content">
+                                                <h4>月卡会员</h4>
+                                                <p class="price">¥1.9</p>
+                                                <p class="duration">30天有效期</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <input type="hidden" id="selectedPackage" name="package" value="day">
+                                </div>
+                                
+                                <div class="form-group">
+                                    <button type="submit" id="activateBtn" class="submit-btn">
+                                        <span class="btn-text">立即购买</span>
+                                        <span class="btn-loader" style="display: none;">
+                                            <i class="fas fa-spinner fa-spin"></i> 跳转中...
+                                        </span>
+                                    </button>
+                                    <p class="form-hint">点击购买将跳转到支付页面</p>
+                                </div>
+                            </form>
+                            
+                            <div id="resultMessage" class="result-message"></div>
+                        </div>
+                        
+                        <div class="card-footer">
+                            <h3><i class="fas fa-info-circle"></i> 购买流程说明</h3>
+                            <ol class="process-steps">
+                                <li>选择会员套餐（天卡/周卡/月卡）</li>
+                                <li>点击"立即购买"按钮</li>
+                                <li>系统将跳转到对应支付页面</li>
+                                <li>完成支付后会员自动开通</li>
+                                <li>购买成功后即可使用所有会员功能</li>
+                            </ol>
+                            <div class="support-info">
+                                <p><i class="fas fa-headset"></i> 如有问题请联系客服</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 简洁的页脚 -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="copyright">
+                    <p>&copy; 2025 Educoder助手 保留一切权利<br>京ICP备2025154249号</p>
+                </div>
+                <div class="footer-links">
+                    <a href="https://yhsun.cn/educoder" target="_blank">官网</a>
+                    <a href="https://yhsun.cn/educoder/terms">服务条款</a>
+                    <a href="https://yhsun.cn/server/activate_member.html">授权码开通</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 服务条款模态框 -->
+    <div id="termsModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>服务条款</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>欢迎使用Educoder助手会员服务。请仔细阅读以下条款：</p>
+                <ol>
+                    <li>会员服务开通后，将在所选套餐有效期内提供相应功能。</li>
+                    <li>会员服务为虚拟产品，一经开通不支持退款。</li>
+                    <li>用户需遵守使用规范，不得将服务用于任何违法违规行为。</li>
+                    <li>我们保留根据实际情况调整服务内容的权利。</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // JavaScript代码 - 全部内嵌
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM元素
+            const activationForm = document.getElementById('activationForm');
+            const packageOptions = document.querySelectorAll('.package-option');
+            const selectedPackageInput = document.getElementById('selectedPackage');
+            const activateBtn = document.getElementById('activateBtn');
+            const btnText = document.querySelector('.btn-text');
+            const btnLoader = document.querySelector('.btn-loader');
+            const resultMessage = document.getElementById('resultMessage');
+            const termsModal = document.getElementById('termsModal');
+            const modalClose = document.querySelector('.modal-close');
+            
+            // 套餐跳转链接映射
+            const packageLinks = {
+                'day': 'https://pay.ldxp.cn/item/zkc0us',
+                'week': 'https://pay.ldxp.cn/item/rhwr7z',
+                'month': 'https://pay.ldxp.cn/item/f2v2by'
+            };
+            
+            // 套餐名称映射
+            const packageNames = {
+                'day': '天卡会员 (1天)',
+                'week': '周卡会员 (7天)',
+                'month': '月卡会员 (30天)'
+            };
+            
+            // 当前选择的套餐
+            let selectedPackage = 'day';
+            
+            // 初始化套餐选择
+            packageOptions.forEach(option => {
+                // 添加点击事件
+                option.addEventListener('click', function(e) {
+                    // 阻止事件冒泡到radio
+                    e.stopPropagation();
+                    
+                    const packageType = this.dataset.package;
+                    
+                    // 移除所有selected类
+                    packageOptions.forEach(opt => {
+                        opt.classList.remove('selected');
+                        opt.classList.remove('pulse-animation');
+                    });
+                    
+                    // 为当前选项添加selected类
+                    this.classList.add('selected');
+                    this.classList.add('pulse-animation');
+                    
+                    // 选中对应的radio
+                    const radio = this.querySelector('input[type="radio"]');
+                    if (radio) {
+                        radio.checked = true;
+                    }
+                    
+                    // 更新选中的套餐
+                    selectedPackage = packageType;
+                    selectedPackageInput.value = selectedPackage;
+                    
+                    // 移除动画类
+                    setTimeout(() => {
+                        this.classList.remove('pulse-animation');
+                    }, 300);
+                });
+                
+                // 为radio添加变化事件（备用）
+                const radio = option.querySelector('input[type="radio"]');
+                if (radio) {
+                    radio.addEventListener('change', function() {
+                        if (this.checked) {
+                            packageOptions.forEach(opt => opt.classList.remove('selected'));
+                            option.classList.add('selected');
+                            selectedPackage = this.value;
+                            selectedPackageInput.value = selectedPackage;
+                        }
+                    });
+                }
+            });
+            
+            // 表单提交事件
+            activationForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                // 验证套餐选择
+                if (!selectedPackage) {
+                    showResultMessage('请选择套餐类型', 'error');
+                    return;
+                }
+                
+                // 显示加载状态
+                setButtonLoading(true);
+                
+                // 获取跳转链接
+                const jumpUrl = packageLinks[selectedPackage];
+                
+                if (!jumpUrl) {
+                    showResultMessage('所选套餐链接不存在', 'error');
+                    setButtonLoading(false);
+                    return;
+                }
+                
+                // 显示跳转提示
+                showResultMessage(`
+                    <div class="info-content">
+                        <h4><i class="fas fa-external-link-alt"></i> 正在跳转到支付页面</h4>
+                        <p><strong>套餐类型：</strong>${packageNames[selectedPackage]}</p>
+                        <p><strong>支付金额：</strong>${getPackagePrice(selectedPackage)}</p>
+                        <p class="success-note" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(67, 97, 238, 0.3);">
+                            <i class="fas fa-lightbulb"></i> 页面将在3秒后自动跳转，如果没有跳转请点击下方按钮
+                        </p>
+                    </div>
+                `, 'info');
+                
+                // 3秒后自动跳转
+                setTimeout(() => {
+                    window.open(jumpUrl, '_blank');
+                    setButtonLoading(false);
+                }, 3000);
+            });
+            
+            // 获取套餐价格
+            function getPackagePrice(packageType) {
+                switch(packageType) {
+                    case 'day': return '¥0.1';
+                    case 'week': return '¥0.5';
+                    case 'month': return '¥1.9';
+                    default: return '¥0.0';
+                }
+            }
+            
+            // 显示结果消息
+            function showResultMessage(content, type) {
+                resultMessage.innerHTML = content;
+                resultMessage.className = `result-message ${type}`;
+                resultMessage.classList.add('show');
+                
+                // 滚动到结果区域
+                setTimeout(() => {
+                    resultMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }, 100);
+                
+                // 8秒后自动隐藏
+                setTimeout(() => {
+                    resultMessage.classList.remove('show');
+                }, 8000);
+            }
+            
+            // 设置按钮加载状态
+            function setButtonLoading(isLoading) {
+                if (isLoading) {
+                    btnText.style.display = 'none';
+                    btnLoader.style.display = 'block';
+                    activateBtn.disabled = true;
+                    activateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 跳转中...';
+                } else {
+                    btnText.style.display = 'block';
+                    btnLoader.style.display = 'none';
+                    activateBtn.disabled = false;
+                    activateBtn.innerHTML = '<span class="btn-text">立即购买</span>';
+                }
+            }
+            
+            // 关闭模态框
+            modalClose.addEventListener('click', function() {
+                termsModal.style.display = 'none';
+            });
+            
+            // 点击模态框外部关闭
+            window.addEventListener('click', function(e) {
+                if (e.target === termsModal) {
+                    termsModal.style.display = 'none';
+                }
+            });
+            
+            // 页面加载完成后，为套餐选项添加一些动画效果
+            setTimeout(() => {
+                packageOptions.forEach((option, index) => {
+                    option.style.opacity = '0';
+                    option.style.transform = 'translateY(10px)';
+                    
+                    setTimeout(() => {
+                        option.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                        option.style.opacity = '1';
+                        option.style.transform = 'translateY(0)';
+                    }, index * 100);
+                });
+            }, 300);
+            
+            // 显示消息函数
+            function showMessage(message, type) {
+                // 移除现有消息
+                const existingMessage = document.querySelector('.message');
+                if (existingMessage) {
+                    existingMessage.remove();
+                }
+                
+                // 创建消息元素
+                const messageElement = document.createElement('div');
+                messageElement.className = `message message-${type}`;
+                messageElement.innerHTML = `
+                    <div class="message-content">
+                        <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i>
+                        <span>${message}</span>
+                    </div>
+                    <button class="message-close"><i class="fas fa-times"></i></button>
+                `;
+                
+                // 添加到页面
+                document.body.appendChild(messageElement);
+                
+                // 显示消息
+                setTimeout(() => {
+                    messageElement.classList.add('show');
+                }, 10);
+                
+                // 关闭按钮事件
+                messageElement.querySelector('.message-close').addEventListener('click', function() {
+                    messageElement.classList.remove('show');
+                    setTimeout(() => {
+                        messageElement.remove();
+                    }, 300);
+                });
+                
+                // 3秒后自动消失
+                setTimeout(() => {
+                    if (messageElement.parentElement) {
+                        messageElement.classList.remove('show');
+                        setTimeout(() => {
+                            if (messageElement.parentElement) {
+                                messageElement.remove();
+                            }
+                        }, 300);
+                    }
+                }, 3000);
+            }
+            
+            // 添加键盘快捷键支持
+            document.addEventListener('keydown', function(e) {
+                // Ctrl+Enter 提交表单
+                if (e.ctrlKey && e.key === 'Enter') {
+                    activationForm.requestSubmit();
+                }
+                
+                // 数字键选择套餐
+                if (e.key >= '1' && e.key <= '3' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                    const index = parseInt(e.key) - 1;
+                    if (packageOptions[index]) {
+                        packageOptions[index].click();
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

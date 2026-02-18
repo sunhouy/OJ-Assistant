@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Educoder助手",
+  "name": "OJ助手",
   "version": "1.0",
-  "description": "自动获取Educoder题目并生成代码解决方案",
+  "description": "自动获取OJ题目并生成代码解决方案",
 
   "icons": {
     "16": "icons/16.ico",
@@ -12,7 +12,7 @@
   },
 
   "action": {
-    "default_title": "Educoder助手",
+    "default_title": "OJ助手",
     "default_icon": {
       "16": "icons/16.ico",
       "32": "icons/32.ico",

@@ -1,5 +1,13 @@
 .vs/
+.venv/
+.vscode/
+.idea/
+.git/
 build/
 dist/
+test/
 Output/
-readme.md
+
+web/educoder/css
+web/educoder/images
+web/educoder/static

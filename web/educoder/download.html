@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>下载 Educoder助手 | 头歌平台智能答题解决方案</title>
+    <link rel="icon" href="icon.png" type="image/png">
+    <link rel="stylesheet" href="css/fontawesome/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #3a86ff;
+            --primary-dark: #2667cc;
+            --primary-light: #e6f0ff;
+            --secondary-color: #8338ec;
+            --accent-color: #ff006e;
+            --success-color: #06d6a0;
+            --dark-bg: #0a0e17;
+            --darker-bg: #050811;
+            --card-bg: #121826;
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --text-muted: #64748b;
+            --border-color: #2d3748;
+            --gradient-primary: linear-gradient(135deg, #3a86ff 0%, #8338ec 100%);
+            --gradient-secondary: linear-gradient(135deg, #ff006e 0%, #fb5607 100%);
+            --transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
+            --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            --shadow-primary: 0 10px 30px rgba(58, 134, 255, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            font-size: 16px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background-color: var(--darker-bg);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* 导航栏 */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 5%;
+            background-color: rgba(10, 14, 23, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: var(--transition);
+        }
+
+        .navbar.scrolled {
+            padding: 1rem 5%;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+        }
+
+        .logo-img {
+            width: 32px;
+            height: 32px;
+            object-fit: contain;
+        }
+
+        .logo-text {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(90deg, #3a86ff, #8338ec);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            padding: 0.8rem 1.8rem;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: var(--transition);
+            border: none;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: var(--gradient-primary);
+            color: white;
+            box-shadow: var(--shadow-primary);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 35px rgba(58, 134, 255, 0.4);
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            color: var(--text-primary);
+            border: 2px solid var(--border-color);
+        }
+
+        .btn-outline:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+            border-color: var(--primary-color);
+        }
+
+        .btn-small {
+            padding: 0.6rem 1.2rem;
+            font-size: 0.85rem;
+        }
+
+        /* 主要内容 */
+        .download-page {
+            padding: 10rem 5% 5rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .page-title {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(90deg, #3a86ff, #8338ec);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            line-height: 1.2;
+        }
+
+        .page-subtitle {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        /* 系统检测区域 */
+        .system-detection {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 3rem;
+            margin-bottom: 3rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .system-detection::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background: var(--gradient-primary);
+        }
+
+        .detection-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .detection-icon {
+            font-size: 2.5rem;
+            color: var(--primary-color);
+        }
+
+        .detection-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .detection-result {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .detected-os {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .os-icon {
+            font-size: 2rem;
+        }
+
+        .os-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .os-details {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .recommended-download {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .download-card {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            padding: 2rem;
+            border: 2px solid var(--primary-color);
+            transition: var(--transition);
+        }
+
+        .download-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(58, 134, 255, 0.2);
+        }
+
+        .download-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .download-card-title {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .download-card-icon {
+            font-size: 2rem;
+            color: var(--primary-color);
+        }
+
+        .download-card-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .download-card-badge {
+            background: var(--gradient-primary);
+            color: white;
+            padding: 0.4rem 1rem;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .download-card-details {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .download-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .download-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .download-value {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .download-card-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* 所有版本区域 */
+        .all-versions {
+            margin-top: 4rem;
+        }
+
+        .section-title {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 2rem;
+            text-align: center;
+            background: linear-gradient(90deg, #3a86ff, #8338ec);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .versions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .version-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2.5rem 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .version-card:hover {
+            transform: translateY(-10px);
+            border-color: rgba(58, 134, 255, 0.3);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .version-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background: var(--gradient-primary);
+        }
+
+        .version-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .version-icon {
+            font-size: 2.5rem;
+            color: var(--primary-color);
+        }
+
+        .version-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .version-desc {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .version-specs {
+            list-style: none;
+            margin-bottom: 2rem;
+        }
+
+        .version-specs li {
+            padding: 0.5rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .version-specs li i {
+            color: var(--success-color);
+            width: 20px;
+        }
+
+        .version-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        /* 系统要求区域 */
+        .system-requirements {
+            margin-top: 6rem;
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 3rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .requirements-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .requirement-card {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 15px;
+            padding: 1.5rem;
+        }
+
+        .requirement-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .requirement-title i {
+            color: var(--primary-color);
+        }
+
+        .requirement-list {
+            list-style: none;
+        }
+
+        .requirement-list li {
+            padding: 0.5rem 0;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .requirement-list li::before {
+            content: '•';
+            color: var(--primary-color);
+            font-size: 1.2rem;
+        }
+
+        /* 安装说明 */
+        .installation-steps {
+            margin-top: 6rem;
+        }
+
+        .steps-container {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            max-width: 800px;
+            margin: 3rem auto 0;
+        }
+
+        .step {
+            display: flex;
+            gap: 2rem;
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 2.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+        }
+
+        .step-number {
+            background: var(--gradient-primary);
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .step-desc {
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* 页脚 - 更新为与主页一致的样式 */
+        footer {
+            padding: 4rem 5% 2rem;
+            background-color: var(--darker-bg);
+            border-top: 1px solid var(--border-color);
+            margin-top: 6rem;
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .footer-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+            text-decoration: none;
+        }
+
+        .footer-logo-img {
+            width: 32px;
+            height: 32px;
+            object-fit: contain;
+        }
+
+        .footer-logo-text {
+            font-size: 1.8rem;
+            font-weight: 800;
+            background: linear-gradient(90deg, #3a86ff, #8338ec);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .footer-navigation {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 2rem 0;
+            width: 100%;
+        }
+
+        .nav-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .footer-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            transition: color 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .footer-link:hover {
+            color: var(--text-secondary);
+            text-decoration: underline;
+        }
+
+        .footer-copyright {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            max-width: 700px;
+            margin-top: 2rem;
+            line-height: 1.6;
+        }
+        
+        .footer-copyright a {
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .footer-copyright a:hover {
+            color: var(--text-secondary);
+            text-decoration: underline;
+        }
+
+        /* 联系销售代表 */
+        .contact-sales {
+            padding: 4rem 5%;
+            background-color: var(--dark-bg);
+            text-align: center;
+        }
+
+        .contact-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .contact-link {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .contact-link:hover {
+            color: var(--primary-light);
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 992px) {
+            .page-title {
+                font-size: 2.8rem;
+            }
+            
+            .section-title {
+                font-size: 2.2rem;
+            }
+            
+            .system-detection, .version-card, .step {
+                padding: 2rem;
+            }
+            
+            .download-card-actions {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: stretch;
+            }
+            
+            .download-card-actions .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                padding: 1rem 5%;
+            }
+            
+            .page-title {
+                font-size: 2.2rem;
+            }
+            
+            .detection-result {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+            
+            .download-card-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+            
+            .download-card-details {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+            
+            .step {
+                flex-direction: column;
+                gap: 1.5rem;
+            }
+            
+            .step-number {
+                align-self: flex-start;
+            }
+            
+            .versions-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-row {
+                gap: 1rem;
+            }
+            
+            .footer-link {
+                font-size: 0.85rem;
+            }
+        }
+    </style>
+    <script>
+var _hmt = _hmt || [];
+(function() {
+  var hm = document.createElement("script");
+  hm.src = "https://hm.baidu.com/hm.js?011b48566756988094e1de91732a8cd8";
+  var s = document.getElementsByTagName("script")[0]; 
+  s.parentNode.insertBefore(hm, s);
+})();
+</script>
+</head>
+<body>
+    <!-- 导航栏 - 更新为与主页一致的图标 -->
+    <nav class="navbar">
+        <a href="index.html" class="logo">
+            <img src="icon.png" alt="Educoder助手" class="logo-img">
+            <span class="logo-text">Educoder助手</span>
+        </a>
+        <div class="nav-buttons">
+            <a href="index.html" class="btn btn-outline">
+                <i class="fas fa-arrow-left"></i> 返回首页
+            </a>
+        </div>
+    </nav>
+
+    <!-- 下载页面内容 -->
+    <main class="download-page">
+        <div class="page-header">
+            <h1 class="page-title">下载 Educoder助手</h1>
+            <p class="page-subtitle">选择适合您操作系统的版本，开始体验智能自动化编程解题的全新方式。</p>
+        </div>
+
+        <!-- 系统检测区域 -->
+        <section class="system-detection">
+            <div class="detection-result">
+                <div class="detected-os">
+                    <i class="fab fa-windows os-icon" id="detected-os-icon"></i>
+                    <div>
+                        <div class="os-name" id="detected-os-name">正在检测您的系统...</div>
+                        <div class="os-details" id="detected-os-details">请稍候...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="recommended-download">
+                <h3 style="font-size: 1.3rem; margin-bottom: 0.5rem;">为您推荐的版本：</h3>
+                <div class="download-card" id="recommended-download-card">
+                    <div class="download-card-header">
+                        <div class="download-card-title">
+                            <i class="fab fa-windows download-card-icon" id="recommended-os-icon"></i>
+                            <span class="download-card-name" id="recommended-os-name">Windows 64位</span>
+                        </div>
+                        <span class="download-card-badge">推荐版本</span>
+                    </div>
+                    
+                    <div class="download-card-details">
+                        <div class="download-info">
+                            <span class="download-label">文件大小</span>
+                            <span class="download-value" id="recommended-file-size">53.2 MB</span>
+                        </div>
+                        <div class="download-info">
+                            <span class="download-label">版本号</span>
+                            <span class="download-value" id="recommended-version">v0.1</span>
+                        </div>
+                        <div class="download-info">
+                            <span class="download-label">发布日期</span>
+                            <span class="download-value" id="recommended-date">2025-12-07</span>
+                        </div>
+                    </div>
+                    
+                    <div class="download-card-actions">
+                        <a href="win64.zip" class="btn btn-primary" id="recommended-download-link" target="_blank">
+                            <i class="fas fa-download"></i> 下载推荐版本
+                        </a>
+                        <a href="#all-versions" class="btn btn-outline">
+                            <i class="fas fa-list"></i> 查看所有版本
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 所有版本区域 -->
+        <section class="all-versions" id="all-versions">
+            <h2 class="section-title">所有可用版本</h2>
+            <div class="versions-grid">
+                <!-- Windows 64位 -->
+                <div class="version-card">
+                    <div class="version-header">
+                        <i class="fab fa-windows version-icon"></i>
+                        <h3 class="version-name">Windows 64位</h3>
+                    </div>
+                    <p class="version-desc">适用于64位Windows 10/11系统，提供最佳性能和兼容性。</p>
+                    <ul class="version-specs">
+                        <li><i class="fas fa-check"></i> 支持 Windows 7/8/10/11 64位</li>
+                        <li><i class="fas fa-check"></i> 需要 2GB RAM</li>
+                        <li><i class="fas fa-check"></i> 需要 100MB 可用空间</li>
+                    </ul>
+                    <div class="version-actions">
+                        <a href="win64.zip" class="btn btn-primary btn-small" target="_blank">
+                            <i class="fas fa-download"></i> 下载 (53.2 MB)
+                        </a>
+                        <button class="btn btn-outline btn-small" onclick="showDetails('windows64')">
+                            <i class="fas fa-info-circle"></i> 详情
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Windows 32位 -->
+                <div class="version-card">
+                    <div class="version-header">
+                        <i class="fab fa-windows version-icon"></i>
+                        <h3 class="version-name">Windows 32位</h3>
+                    </div>
+                    <p class="version-desc">适用于32位Windows 7/8/10系统，兼容旧版硬件和操作系统。</p>
+                    <ul class="version-specs">
+                        <li><i class="fas fa-check"></i> 支持 Windows XP/7/8/10/11 32位</li>
+                        <li><i class="fas fa-check"></i> 需要 1GB RAM</li>
+                        <li><i class="fas fa-check"></i> 需要 100MB 可用空间</li>
+                    </ul>
+                    <div class="version-actions">
+                        <a href="win64.zip" class="btn btn-primary btn-small" target="_blank">
+                            <i class="fas fa-download"></i> 下载 (38 MB)
+                        </a>
+                        <button class="btn btn-outline btn-small" onclick="showDetails('windows32')">
+                            <i class="fas fa-info-circle"></i> 详情
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 联系销售代表 -->
+    <section class="contact-sales">
+        <div class="contact-container">
+            <h3 style="font-size: 1.5rem; margin-bottom: 1.5rem; color: var(--text-primary);">不确定Educoder助手是否适合我？立即联系我们的销售代表</h3>
+            <p><a href="javascript:showContact()" class="contact-link">点击查看联系方式</a></p>
+            <div id="contact-info" style="display: none; margin-top: 2rem; color: var(--text-secondary);">
+                <p style="margin: 0.5rem 0;">电话：13391617487</p>
+                <p style="margin: 0.5rem 0;">邮箱：sales@yhsun.cn</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- 页脚 - 更新为与主页一致的导航 -->
+    <footer>
+        <div class="footer-content">
+            <a href="#" class="footer-logo">
+                <img src="icon.png" alt="Educoder助手" class="footer-logo-img">
+                <span class="footer-logo-text">Educoder助手</span>
+            </a>
+            
+            <!-- 底部导航栏 - 与主页保持一致 -->
+            <div class="footer-navigation">
+                <div class="nav-row">
+                    <a href="https://yhsun.cn/educoder/download.html" class="footer-link" target="_blank">下载</a>
+                    <a href="https://yhsun.cn/educoder/help/" class="footer-link" target="_blank">用户手册</a>
+                    <a href="https://yhsun.cn/server/member/" class="footer-link" target="_blank">开通会员</a>
+                    <a href="https://yhsun.cn/server/activate_member.html" class="footer-link" target="_blank">授权码激活会员</a>
+                    <a href="https://yhsun.cn/oj" class="footer-link" target="_blank">在线评测系统</a>
+                </div>
+                <div class="nav-row">
+                    <a href="https://yhsun.cn/educoder/terms/" class="footer-link" target="_blank">用户协议与隐私政策</a>
+                    <a href="https://yhsun.cn/educoder/license" class="footer-link" target="_blank">开放源代码许可</a>
+                    <a href="https://yhsun.cn/educoder/chrome.html" class="footer-link" target="_blank">Chrome拓展手动安装教程</a>
+                    <a href="https://yhsun.cn/educoder/edge.html" class="footer-link" target="_blank">Edge拓展手动安装教程</a>
+                </div>
+            </div>
+            
+            <div class="footer-copyright">
+                © 2025 Educoder助手 保留所有权利<br>
+                <a href="https://beian.miit.gov.cn/" target="_blank">
+                    京ICP备2025154249号
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // 显示联系方式函数
+        function showContact() {
+            document.getElementById('contact-info').style.display = 'block';
+        }
+        
+        // 系统检测函数
+        function detectOS() {
+            const userAgent = window.navigator.userAgent;
+            const platform = window.navigator.platform;
+            let osName = "未知系统";
+            let osDetails = "";
+            let osIcon = "fas fa-desktop";
+            
+            // Windows检测
+            if (userAgent.indexOf("Windows NT 10.0") !== -1) {
+                osName = "Windows 10/11";
+                osDetails = "64位操作系统";
+                osIcon = "fab fa-windows";
+            } else if (userAgent.indexOf("Windows NT 6.2") !== -1 || userAgent.indexOf("Windows NT 6.3") !== -1) {
+                osName = "Windows 8/8.1";
+                osDetails = "检测到32位或64位系统";
+                osIcon = "fab fa-windows";
+            } else if (userAgent.indexOf("Windows NT 6.1") !== -1) {
+                osName = "Windows 7";
+                osDetails = "检测到32位或64位系统";
+                osIcon = "fab fa-windows";
+            } else if (userAgent.indexOf("Windows NT 6.0") !== -1) {
+                osName = "Windows Vista";
+                osDetails = "检测到32位或64位系统";
+                osIcon = "fab fa-windows";
+            } else if (userAgent.indexOf("Windows") !== -1) {
+                osName = "Windows";
+                osDetails = "检测到Windows系统";
+                osIcon = "fab fa-windows";
+            }
+            // macOS检测
+            else if (userAgent.indexOf("Macintosh") !== -1) {
+                osName = "macOS";
+                osDetails = "苹果操作系统";
+                osIcon = "fab fa-apple";
+            }
+            // Linux检测
+            else if (userAgent.indexOf("Linux") !== -1) {
+                osName = "Linux";
+                osDetails = "Linux操作系统";
+                osIcon = "fab fa-linux";
+            }
+            // iOS检测
+            else if (userAgent.indexOf("iPhone") !== -1 || userAgent.indexOf("iPad") !== -1) {
+                osName = "iOS";
+                osDetails = "苹果移动操作系统";
+                osIcon = "fab fa-apple";
+            }
+            // Android检测
+            else if (userAgent.indexOf("Android") !== -1) {
+                osName = "Android";
+                osDetails = "安卓操作系统";
+                osIcon = "fab fa-android";
+            }
+            
+            // 检测是否为64位（仅对Windows有效）
+            if (osName.includes("Windows")) {
+                if (navigator.userAgent.indexOf("WOW64") !== -1 || 
+                    navigator.userAgent.indexOf("Win64") !== -1 ||
+                    navigator.platform === "Win64") {
+                    osDetails = "64位操作系统";
+                } else {
+                    osDetails = "32位操作系统";
+                }
+            }
+            
+            return { osName, osDetails, osIcon };
+        }
+        
+        // 根据操作系统推荐版本
+        function getRecommendedVersion(osInfo) {
+            const versions = {
+                "windows64": {
+                    name: "Windows 64位",
+                    icon: "fab fa-windows",
+                    fileSize: "53.2 MB",
+                    version: "v0.1",
+                    date: "2025-12-08",
+                    url: "win64.zip"
+                },
+                "windows32": {
+                    name: "Windows 32位",
+                    icon: "fab fa-windows",
+                    fileSize: "38 MB",
+                    version: "v0.1",
+                    date: "2025-12-08",
+                    url: "win64.zip"
+                }
+            };
+            
+            // 根据检测结果选择推荐版本
+            if (osInfo.osName.includes("Windows")) {
+                if (osInfo.osDetails.includes("64位")) {
+                    return versions.windows64;
+                } else {
+                    return versions.windows32;
+                }
+            } else if (osInfo.osName.includes("macOS") || osInfo.osName.includes("iOS")) {
+                return versions.macos;
+            } else if (osInfo.osName.includes("Linux")) {
+                return versions.linux;
+            } else {
+                // 默认推荐Windows 64位
+                return versions.windows64;
+            }
+        }
+        
+        // 更新页面显示
+        function updatePageWithOSInfo() {
+            const osInfo = detectOS();
+            const recommended = getRecommendedVersion(osInfo);
+            
+            // 更新检测结果
+            document.getElementById('detected-os-name').textContent = osInfo.osName;
+            document.getElementById('detected-os-details').textContent = osInfo.osDetails;
+            document.getElementById('detected-os-icon').className = osInfo.osIcon + " os-icon";
+            
+            // 更新推荐版本
+            document.getElementById('recommended-os-name').textContent = recommended.name;
+            document.getElementById('recommended-os-icon').className = recommended.icon + " download-card-icon";
+            document.getElementById('recommended-file-size').textContent = recommended.fileSize;
+            document.getElementById('recommended-version').textContent = recommended.version;
+            document.getElementById('recommended-date').textContent = recommended.date;
+            document.getElementById('recommended-download-link').href = recommended.url;
+        }
+        
+        // 显示版本详情
+        function showDetails(version) {
+            const details = {
+                windows64: {
+                    title: "Windows 64位版本详情",
+                    content: "此版本专为64位Windows系统优化，包含完整功能"
+                },
+                windows32: {
+                    title: "Windows 32位版本详情",
+                    content: "此版本兼容32位Windows系统，适合旧版硬件"
+                }
+            };
+            
+            if (details[version]) {
+                alert(details[version].title + "\n\n" + details[version].content);
+            }
+        }
+        
+        // 页面加载完成后执行
+        document.addEventListener('DOMContentLoaded', function() {
+            // 导航栏滚动效果
+            const navbar = document.querySelector('.navbar');
+            window.addEventListener('scroll', function() {
+                if (window.scrollY > 50) {
+                    navbar.classList.add('scrolled');
+                } else {
+                    navbar.classList.remove('scrolled');
+                }
+            });
+            
+            // 检测系统并更新页面
+            updatePageWithOSInfo();
+            
+            // 平滑滚动
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const targetId = this.getAttribute('href');
+                    if (targetId === '#') return;
+                    
+                    const targetElement = document.querySelector(targetId);
+                    if (targetElement) {
+                        window.scrollTo({
+                            top: targetElement.offsetTop - 100,
+                            behavior: 'smooth'
+                        });
+                    }
+                });
+            });
+            
+            // 添加下载按钮点击统计
+            
+           
+        });
+    </script>
+</body>
+</html>

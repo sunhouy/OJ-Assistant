@@ -13,7 +13,7 @@ from __init__ import version
 
 WINDOWS_API_AVAILABLE = True
 from gui.dialogs import FirstRunDialog
-from gui.main_window import EducoderGUI
+from gui.main_window import OJGUI
 from gui.update_window import UpdateWindow
 from utils.config import ConfigManager
 
@@ -21,7 +21,7 @@ from utils.config import ConfigManager
 class LoginWindow:
     def __init__(self, root):
         self.root = root
-        self.root.title("Educoder助手")
+        self.root.title("OJ助手")
 
         # 尝试设置图标
         try:
@@ -63,7 +63,7 @@ class LoginWindow:
     def _check_single_instance_thread(self):
         """检查单实例的线程函数"""
         # 使用命名互斥锁检测单实例
-        mutex_name = "Global\\EducoderAssistantMutex_{}".format(self.machine_code)
+        mutex_name = "Global\\OJAssistantMutex_{}".format(self.machine_code)
 
         try:
                 # 尝试创建互斥锁
@@ -271,7 +271,7 @@ class LoginWindow:
         # 标题
         title_label = ttk.Label(
             main_frame,
-            text="Educoder助手",
+            text="OJ助手",
             font=("微软雅黑", 16, "bold")
         )
         title_label.pack(pady=(0, 10))
@@ -768,14 +768,14 @@ class LoginWindow:
 
         # 创建主窗口
         main_window = tk.Toplevel(self.root)
-        main_window.title("Educoder助手")
+        main_window.title("OJ助手")
         main_window.geometry("800x800")
 
         # 设置关闭主窗口时退出程序
         main_window.protocol("WM_DELETE_WINDOW", lambda: self.on_main_window_close(main_window))
 
         # 创建主应用
-        app = EducoderGUI(main_window, username, token, self.machine_code)
+        app = OJGUI(main_window, username, token, self.machine_code)
 
         # 检查是否需要显示首次运行对话框
         self.check_and_show_welcome_dialog(main_window)
