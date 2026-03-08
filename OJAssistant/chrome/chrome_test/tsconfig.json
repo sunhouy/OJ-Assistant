@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES6",                 // 编译成哪个版本的 JavaScript
+    "module": "ESNext",               // 使用的模块标准
+    "lib": ["DOM", "ESNext"],         // 需要包含的类型声明文件
+    "strict": true,                   // 开启所有严格类型检查选项
+    "esModuleInterop": true,          // 启用 ES 模块互操作性
+    "skipLibCheck": true,             // 跳过声明文件的类型检查
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "./dist",               // 编译输出目录（如果直接使用 tsc 编译）
+    "rootDir": "./src",                // 源代码根目录
+    "moduleResolution": "bundler"         // 模块解析策略
+  },
+  "include": ["src/**/*"],            // 指定需要编译的文件目录
+  "exclude": ["node_modules"]          // 排除的目录
+}
