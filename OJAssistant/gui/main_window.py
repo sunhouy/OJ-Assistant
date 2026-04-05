@@ -2,6 +2,7 @@ import atexit
 import json
 import os
 import queue
+import subprocess
 import sys
 import threading
 import time
@@ -27,8 +28,6 @@ from gui.language_manager import LanguageManager
 from gui.update_window import UpdateWindow
 from utils.config import ConfigManager
 
-from utils.extension_setup import main as run_extension_setup
-
 
 class OJGUI:
     def __init__(self, root, username, token, machine_code=None, parent_window=None, current_version=None):
@@ -51,6 +50,8 @@ class OJGUI:
         self.minimize_to_tray_var = tk.BooleanVar(value=False)  # 关闭时最小化到托盘选项
         self.is_closing = False  # 标记是否正在关闭
         self.remote_assist_server = None  # 远程协助服务器
+        self.extension_setup_process = None
+        self.last_extension_setup_launch_ts = 0.0
 
         # 托盘图标相关变量
         self.tray_icon = None
@@ -1673,20 +1674,60 @@ class OJGUI:
     def open_extension_setup(self):
         """打开浏览器扩展安装工具"""
         try:
-                # 在新线程中运行扩展安装工具，避免阻塞主界面
-                threading.Thread(
-                    target=self._run_extension_setup_thread,
-                    daemon=True
-                ).start()
+            now = time.time()
+            # 防抖：避免连点或重复触发导致大量窗口
+            if now - self.last_extension_setup_launch_ts < 1.5:
+                self.log("扩展安装工具正在启动，请勿重复点击")
+                return
+
+            # 单实例保护：已有运行中的安装工具则只提示
+            if self.extension_setup_process and self.extension_setup_process.poll() is None:
+                self.log("扩展安装工具已在运行中")
+                self.status_var.set("扩展安装工具已在运行中")
+                return
+
+            self.last_extension_setup_launch_ts = now
+            self._launch_extension_setup_process()
+            self.log("已启动扩展安装工具")
+            self.status_var.set("扩展安装工具已启动")
 
         except Exception as e:
             self.log(f"打开扩展安装工具时出错: {e}")
             messagebox.showerror("错误", f"无法打开扩展安装工具:\n{str(e)}")
             self.status_var.set("打开扩展安装工具失败")
 
-    def _run_extension_setup_thread(self):
-        """在新线程中运行扩展安装工具"""
-        run_extension_setup()
+    def _find_extension_setup_file(self):
+        """查找 extension_setup.py 文件路径。"""
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+
+        candidates = [
+            os.path.join(project_root, "utils", "extension_setup.py"),
+            os.path.join(current_dir, "extension_setup.py"),
+            os.path.join(project_root, "extension_setup.py"),
+        ]
+
+        for path in candidates:
+            if os.path.exists(path):
+                return path
+
+        for root, _, files in os.walk(project_root):
+            if "extension_setup.py" in files:
+                return os.path.join(root, "extension_setup.py")
+
+        return None
+
+    def _launch_extension_setup_process(self):
+        """通过子进程启动扩展安装工具，避免Tk跨线程问题。"""
+        script_path = self._find_extension_setup_file()
+        if not script_path:
+            raise FileNotFoundError("未找到 extension_setup.py")
+
+        kwargs = {}
+        if os.name == "nt" and hasattr(subprocess, "CREATE_NEW_CONSOLE"):
+            kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
+
+        self.extension_setup_process = subprocess.Popen([sys.executable, script_path], **kwargs)
 
 
     def process_log_queue(self):

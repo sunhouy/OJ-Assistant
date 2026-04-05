@@ -695,6 +695,8 @@ class EducoderFloatingAssistant {
 
             if (data.type === 'code_solution') {
                 this.handleCodeSolution(data);
+            } else if (data.type === 'server_ack') {
+                this.handleServerAck(data);
             } else if (data.type === 'code_revision') {
                 this.handleCodeRevision(data);
             } else if (data.type === 'ready_for_input') {
@@ -720,6 +722,24 @@ class EducoderFloatingAssistant {
                 this.showMessage(`服务器: ${message}`, 'received');
             }
         }
+    }
+
+    handleServerAck(data) {
+        const stage = data.stage || 'unknown';
+        const existingLen = Number.isFinite(data.existing_code_length) ? data.existing_code_length : -1;
+        const source = data.editor_code_source || 'unknown';
+        const reason = data.editor_code_reason ? `, 原因: ${data.editor_code_reason}` : '';
+
+        if (stage === 'content_received') {
+            if (existingLen >= 0) {
+                this.showMessage(`服务器确认收到题目，编辑器代码长度: ${existingLen}, 来源: ${source}${reason}`, 'system');
+            } else {
+                this.showMessage('服务器确认收到题目内容，开始生成代码', 'system');
+            }
+            return;
+        }
+
+        this.showMessage(`服务器确认: ${stage}`, 'system');
     }
 
     // 处理服务器进度更新
@@ -984,7 +1004,12 @@ class EducoderFloatingAssistant {
             const enrichedContent = await this.enrichContentWithImageOCR(content);
             this.currentQuestionContent = enrichedContent;
             const editorSnapshot = await this.extractCurrentEditorCode();
-            const currentEditorCode = editorSnapshot.code || '';
+            let currentEditorCode = editorSnapshot.code || '';
+
+            if (editorSnapshot.source === 'dom_monaco_view_lines') {
+                this.showMessage('Monaco仅获取到可视区预览文本，可能不完整；本次将不附带已有代码以避免污染生成结果', 'warning');
+                currentEditorCode = '';
+            }
 
             if (enrichedContent.text) {
                 this.showContentPreview(enrichedContent);
@@ -1006,8 +1031,16 @@ class EducoderFloatingAssistant {
                     type: 'educoder_content_auto_input',
                     timestamp: new Date().toISOString(),
                     url: window.location.href,
-                    content: enrichedContent,
+                    content: {
+                        ...enrichedContent,
+                        current_code: currentEditorCode || '',
+                        existing_code: currentEditorCode || ''
+                    },
                     current_code: currentEditorCode || '',
+                    existing_code: currentEditorCode || '',
+                    editor_code: currentEditorCode || '',
+                    editor_code_source: editorSnapshot.source || 'unknown',
+                    editor_code_reason: editorSnapshot.reason || '',
                     auto_input: true
                 };
 
@@ -1266,6 +1299,9 @@ class EducoderFloatingAssistant {
                         let code = '';
                         let ok = false;
                         let used = '';
+                        let reason = '';
+
+                        const hasMonacoDom = !!document.querySelector('.monaco-editor');
 
                         function visible(el) {
                             if (!el) return false;
@@ -1275,34 +1311,87 @@ class EducoderFloatingAssistant {
                             return rect.width > 0 && rect.height > 0;
                         }
 
+                        function areaOf(el) {
+                            if (!el) return 0;
+                            const rect = el.getBoundingClientRect();
+                            return Math.max(0, rect.width) * Math.max(0, rect.height);
+                        }
+
+                        function pickMonacoEditor(editors) {
+                            const active = document.activeElement;
+                            const visibleEditors = (editors || []).filter(ed => {
+                                try {
+                                    const node = ed.getDomNode && ed.getDomNode();
+                                    return node && visible(node);
+                                } catch (e) {
+                                    return false;
+                                }
+                            });
+
+                            if (!visibleEditors.length) {
+                                return null;
+                            }
+
+                            const byActive = visibleEditors.find(ed => {
+                                try {
+                                    const node = ed.getDomNode && ed.getDomNode();
+                                    return node && active && node.contains(active);
+                                } catch (e) {
+                                    return false;
+                                }
+                            });
+                            if (byActive) {
+                                return byActive;
+                            }
+
+                            const byFocus = visibleEditors.find(ed => {
+                                try {
+                                    return ed.hasTextFocus && ed.hasTextFocus();
+                                } catch (e) {
+                                    return false;
+                                }
+                            });
+                            if (byFocus) {
+                                return byFocus;
+                            }
+
+                            visibleEditors.sort((a, b) => {
+                                const an = a.getDomNode && a.getDomNode();
+                                const bn = b.getDomNode && b.getDomNode();
+                                return areaOf(bn) - areaOf(an);
+                            });
+
+                            return visibleEditors[0] || null;
+                        }
+
                         try {
                             if (!ok && window.monaco && window.monaco.editor) {
                                 const getEditors = window.monaco.editor.getEditors;
                                 if (typeof getEditors === 'function') {
                                     const editors = getEditors.call(window.monaco.editor) || [];
-                                    const visibleEditors = editors.filter(ed => {
-                                        try {
-                                            const node = ed.getDomNode && ed.getDomNode();
-                                            return node && visible(node);
-                                        } catch (e) {
-                                            return false;
-                                        }
-                                    });
-                                    const target = visibleEditors.find(ed => ed.hasTextFocus && ed.hasTextFocus()) || visibleEditors[0] || null;
+                                    const target = pickMonacoEditor(editors);
                                     if (target && typeof target.getValue === 'function') {
                                         code = target.getValue() || '';
                                         ok = true;
                                         used = 'monaco_editor_getValue';
+                                        reason = 'active_or_largest_visible_editor';
+                                    } else {
+                                        reason = 'monaco_editor_not_found';
                                     }
                                 }
                                 if (!ok && typeof window.monaco.editor.getModels === 'function') {
                                     const models = window.monaco.editor.getModels() || [];
-                                    if (models.length && typeof models[0].getValue === 'function') {
+                                    if (models.length === 1 && typeof models[0].getValue === 'function') {
                                         code = models[0].getValue() || '';
                                         ok = true;
                                         used = 'monaco_model_getValue';
+                                        reason = 'single_model_fallback';
+                                    } else if (!ok && models.length > 1) {
+                                        reason = 'multiple_monaco_models_no_safe_pick';
                                     }
                                 }
+                            } else if (hasMonacoDom) {
+                                reason = 'monaco_dom_detected_but_api_unavailable';
                             }
 
                             if (!ok) {
@@ -1332,7 +1421,7 @@ class EducoderFloatingAssistant {
                                 }
                             }
 
-                            if (!ok) {
+                            if (!ok && !hasMonacoDom) {
                                 const textareas = Array.from(document.querySelectorAll('textarea')).filter(el => {
                                     if (el.closest('#educoder-assistant-floating')) return false;
                                     return visible(el);
@@ -1342,13 +1431,14 @@ class EducoderFloatingAssistant {
                                     code = textareas[0].value || '';
                                     ok = true;
                                     used = 'textarea_value';
+                                    reason = 'non_monaco_fallback';
                                 }
                             }
                         } catch (e) {
-                            // ignore
+                            reason = 'page_context_exception:' + (e && e.message ? e.message : String(e));
                         }
 
-                        window.postMessage({ source, ok, code, used }, '*');
+                        window.postMessage({ source, ok, code, used, reason }, '*');
                     })();
                 `;
 
@@ -1361,7 +1451,7 @@ class EducoderFloatingAssistant {
                 return {
                     code: result.code || '',
                     source: result.used || 'page_context',
-                    reason: ''
+                    reason: result.reason || ''
                 };
             }
 
@@ -1391,21 +1481,64 @@ class EducoderFloatingAssistant {
 
     extractCurrentEditorCodeFromDom() {
         try {
-            const textareas = Array.from(document.querySelectorAll('textarea')).filter(el => {
-                if (el.closest('#educoder-assistant-floating')) return false;
-                if (!this.isVisibleElement(el)) return false;
-                return typeof el.value === 'string' && el.value.trim().length > 0;
-            });
-            if (textareas.length) {
-                textareas.sort((a, b) => (b.value || '').length - (a.value || '').length);
-                return { code: textareas[0].value || '', source: 'dom_textarea', reason: '' };
-            }
+            const hasMonacoDom = !!document.querySelector('.monaco-editor');
 
             const monacoView = document.querySelector('.monaco-editor .view-lines');
             if (monacoView && this.isVisibleElement(monacoView)) {
                 const text = (monacoView.innerText || '').trimEnd();
                 if (text) {
-                    return { code: text, source: 'dom_monaco_view_lines', reason: 'page_context_unavailable' };
+                    return { code: text, source: 'dom_monaco_view_lines', reason: 'monaco_dom_preview_only' };
+                }
+            }
+
+            // Monaco 页面不再降级读取通用textarea，避免误抓非代码输入框
+            if (hasMonacoDom) {
+                return { code: '', source: 'none', reason: 'monaco_dom_detected_but_preview_empty' };
+            }
+
+            const codemirrorCode = document.querySelector('.CodeMirror-code');
+            if (codemirrorCode && this.isVisibleElement(codemirrorCode)) {
+                const text = (codemirrorCode.innerText || '').trimEnd();
+                if (text) {
+                    return { code: text, source: 'dom_codemirror_code', reason: 'page_context_unavailable' };
+                }
+            }
+
+            const aceTextLayer = document.querySelector('.ace_text-layer');
+            if (aceTextLayer && this.isVisibleElement(aceTextLayer)) {
+                const text = (aceTextLayer.innerText || '').trimEnd();
+                if (text) {
+                    return { code: text, source: 'dom_ace_text_layer', reason: 'page_context_unavailable' };
+                }
+            }
+
+            const textareas = Array.from(document.querySelectorAll('textarea')).filter(el => {
+                if (el.closest('#educoder-assistant-floating')) return false;
+                if (!this.isVisibleElement(el)) return false;
+                if (el.readOnly || el.disabled) return false;
+                return typeof el.value === 'string' && el.value.trim().length > 0;
+            });
+            if (textareas.length) {
+                const ranked = textareas
+                    .map((el) => {
+                        const value = el.value || '';
+                        const score = this.editorElementScore(el);
+                        const marker = [
+                            el.id || '',
+                            el.className || '',
+                            el.getAttribute('name') || '',
+                            el.getAttribute('placeholder') || ''
+                        ].join(' ').toLowerCase();
+                        const isLikelySearchBox = /search|查询|检索|message|chat|评论|备注/.test(marker);
+                        const looksLikeCode = value.includes('\n') || /[{}();]|\b(class|def|function|public|private|import|include|return)\b/.test(value);
+                        const confidence = score + (looksLikeCode ? 4 : 0) + Math.min(6, Math.floor(value.length / 80)) - (isLikelySearchBox ? 8 : 0);
+                        return { el, value, confidence, looksLikeCode };
+                    })
+                    .sort((a, b) => b.confidence - a.confidence || b.value.length - a.value.length);
+
+                const top = ranked[0];
+                if (top && (top.looksLikeCode || top.value.length >= 40) && top.confidence >= 2) {
+                    return { code: top.value, source: 'dom_textarea_ranked', reason: `confidence_${top.confidence}` };
                 }
             }
 
@@ -1476,6 +1609,29 @@ class EducoderFloatingAssistant {
             const elements = testResults.elements || [];
             this.showMessage(`找到${elements.length}个测试元素，正在分析测试结果并进行纠错...`, 'system');
 
+            const editorSnapshot = await this.extractCurrentEditorCode();
+            let currentEditorCode = editorSnapshot.code || '';
+
+            if (editorSnapshot.source === 'dom_monaco_view_lines') {
+                this.showMessage('智能纠错仅获取到Monaco可视区文本，可能不完整，将优先回退到最近一次完整生成代码', 'warning');
+                if (this.generatedCode && this.generatedCode.length > currentEditorCode.length) {
+                    currentEditorCode = this.generatedCode;
+                }
+            }
+
+            if (!currentEditorCode && this.generatedCode) {
+                currentEditorCode = this.generatedCode;
+            }
+
+            const smartFixCodeSource = currentEditorCode === (editorSnapshot.code || '')
+                ? (editorSnapshot.source || 'unknown')
+                : 'fallback_generated_code';
+            const smartFixCodeReason = currentEditorCode === (editorSnapshot.code || '')
+                ? (editorSnapshot.reason || '')
+                : 'editor_snapshot_unreliable_or_empty';
+
+            this.showMessage(`智能纠错使用代码长度: ${currentEditorCode.length} 字符, 来源: ${smartFixCodeSource}${smartFixCodeReason ? `, 原因: ${smartFixCodeReason}` : ''}`, 'system');
+
             // 发送远程协助消息
             this.sendRemoteMessage({
                 type: 'test_results',
@@ -1494,7 +1650,12 @@ class EducoderFloatingAssistant {
                 timestamp: new Date().toISOString(),
                 url: window.location.href,
                 results: testResults,
-                currentCode: this.generatedCode,
+                currentCode: currentEditorCode,
+                current_code: currentEditorCode,
+                existing_code: currentEditorCode,
+                editor_code: currentEditorCode,
+                editor_code_source: smartFixCodeSource,
+                editor_code_reason: smartFixCodeReason,
                 // 始终设置 has_error 为 true，确保服务器进行纠错
                 has_error: true,
                 // 添加测试集元素的详细信息
@@ -1764,10 +1925,24 @@ class EducoderFloatingAssistant {
     }
 
     async setCodeToPageEditor(code) {
+        const hasMonacoDom = !!document.querySelector('.monaco-editor');
+
         // 0) 优先在页面上下文执行，可访问页面自身JS对象（monaco/codemirror/ace）
         const pageContextResult = await this.setCodeViaPageContext(code);
         if (pageContextResult.ok) {
             return pageContextResult;
+        }
+
+        // Monaco 页面只尝试 Monaco，避免误写到其他输入框
+        if (hasMonacoDom) {
+            if (this.setCodeToMonaco(code)) {
+                return { ok: true, reason: 'content_script_monaco' };
+            }
+
+            return {
+                ok: false,
+                reason: pageContextResult.reason || 'monaco_detected_but_write_failed'
+            };
         }
 
         // 1) Monaco Editor
@@ -1843,11 +2018,13 @@ class EducoderFloatingAssistant {
 
             const script = document.createElement('script');
             script.textContent = `
-                (function () {
+                (async function () {
                     const source = ${JSON.stringify(channel)};
                     const code = ${JSON.stringify(code)};
+                    const normalizedCode = (code || '').replace(/\r\n/g, '\n');
                     let ok = false;
                     let reason = '';
+                    const hasMonacoDom = !!document.querySelector('.monaco-editor');
 
                     function visible(el) {
                         if (!el) return false;
@@ -1855,6 +2032,84 @@ class EducoderFloatingAssistant {
                         if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
                         const rect = el.getBoundingClientRect();
                         return rect.width > 0 && rect.height > 0;
+                    }
+
+                    function areaOf(el) {
+                        if (!el) return 0;
+                        const rect = el.getBoundingClientRect();
+                        return Math.max(0, rect.width) * Math.max(0, rect.height);
+                    }
+
+                    function pickMonacoEditor(editors) {
+                        const active = document.activeElement;
+                        const visibleEditors = (editors || []).filter(ed => {
+                            try {
+                                const node = ed.getDomNode && ed.getDomNode();
+                                return node && visible(node);
+                            } catch (e) {
+                                return false;
+                            }
+                        });
+
+                        if (!visibleEditors.length) {
+                            return null;
+                        }
+
+                        const byActive = visibleEditors.find(ed => {
+                            try {
+                                const node = ed.getDomNode && ed.getDomNode();
+                                return node && active && node.contains(active);
+                            } catch (e) {
+                                return false;
+                            }
+                        });
+                        if (byActive) {
+                            return byActive;
+                        }
+
+                        const byTextFocus = visibleEditors.find(ed => {
+                            try {
+                                return ed.hasTextFocus && ed.hasTextFocus();
+                            } catch (e) {
+                                return false;
+                            }
+                        });
+                        if (byTextFocus) {
+                            return byTextFocus;
+                        }
+
+                        visibleEditors.sort((a, b) => {
+                            const an = a.getDomNode && a.getDomNode();
+                            const bn = b.getDomNode && b.getDomNode();
+                            return areaOf(bn) - areaOf(an);
+                        });
+
+                        return visibleEditors[0] || null;
+                    }
+
+                    async function tryFormatMonaco(editor) {
+                        if (!editor || typeof editor.getAction !== 'function') {
+                            return;
+                        }
+
+                        const actionIds = ['editor.action.formatDocument', 'editor.action.reindentlines'];
+                        for (const id of actionIds) {
+                            try {
+                                const action = editor.getAction(id);
+                                if (!action || typeof action.run !== 'function') {
+                                    continue;
+                                }
+                                const result = action.run();
+                                if (result && typeof result.then === 'function') {
+                                    await Promise.race([
+                                        result,
+                                        new Promise(resolve => setTimeout(resolve, 800))
+                                    ]);
+                                }
+                            } catch (e) {
+                                // ignore format action errors
+                            }
+                        }
                     }
 
                     try {
@@ -1879,81 +2134,63 @@ class EducoderFloatingAssistant {
                                     ? (window.monaco.editor.getEditors() || [])
                                     : [];
 
-                                let target = null;
-                                if (editors.length) {
-                                    const visibleEditors = editors.filter(ed => {
-                                        try {
-                                            const node = ed.getDomNode && ed.getDomNode();
-                                            return node && visible(node);
-                                        } catch (e) {
-                                            return false;
-                                        }
-                                    });
-                                    target = visibleEditors.find(ed => ed.hasTextFocus && ed.hasTextFocus()) || visibleEditors[0] || null;
-                                }
-
-                                function typeCodeLikeKeyboard(editor, text) {
-                                    const lines = text.split('\n');
-
-                                    // 清空现有内容，再逐行输入
-                                    editor.setValue('');
-                                    editor.focus();
-
-                                    for (let idx = 0; idx < lines.length; idx++) {
-                                        if (lines[idx]) {
-                                            // 直接按原行文本输入，避免额外按键改变缩进
-                                            editor.trigger('keyboard', 'type', { text: lines[idx] });
-                                        }
-
-                                        // 仅换行，不执行Home，避免缩进被重置
-                                        if (idx < lines.length - 1) {
-                                            editor.trigger('keyboard', 'type', { text: '\n' });
-                                        }
-                                    }
-                                }
-
+                                let target = pickMonacoEditor(editors);
                                 if (!target) {
                                     const models = typeof window.monaco.editor.getModels === 'function'
                                         ? window.monaco.editor.getModels()
                                         : [];
-                                    if (models && models.length) {
-                                        models[0].setValue(code);
-                                        ok = true;
-                                        reason = 'monaco_model_setValue';
+                                    if (models && models.length === 1 && typeof models[0].setValue === 'function') {
+                                        models[0].setValue('');
+                                        models[0].setValue(normalizedCode);
+                                        const verify = typeof models[0].getValue === 'function'
+                                            ? (models[0].getValue() || '').replace(/\r\n/g, '\n')
+                                            : '';
+                                        if (verify === normalizedCode) {
+                                            ok = true;
+                                            reason = 'monaco_single_model_setValue_verified';
+                                        } else {
+                                            reason = 'monaco_single_model_verify_mismatch';
+                                        }
+                                    } else {
+                                        reason = 'monaco_target_not_found';
                                     }
                                 } else {
                                     try {
-                                        target.setValue(code);
-                                        const verify = typeof target.getValue === 'function' ? target.getValue() : '';
-                                        if (verify === code) {
+                                        target.setValue('');
+                                        target.setValue(normalizedCode);
+                                        const verify = typeof target.getValue === 'function'
+                                            ? (target.getValue() || '').replace(/\r\n/g, '\n')
+                                            : '';
+                                        if (verify === normalizedCode) {
+                                            await tryFormatMonaco(target);
                                             ok = true;
-                                            reason = 'monaco_editor_setValue_verified';
+                                            reason = 'monaco_editor_setValue_verified_and_formatted';
                                         } else {
-                                            typeCodeLikeKeyboard(target, code);
-                                            ok = true;
-                                            reason = 'monaco_editor_keyboard_style_fallback';
+                                            reason = 'monaco_editor_verify_mismatch';
                                         }
                                     } catch (typingError) {
-                                        // setValue与逐行输入都失败时，标记失败原因
                                         reason = 'monaco_editor_write_failed:' + (typingError && typingError.message ? typingError.message : String(typingError));
                                     }
 
                                     if (ok && target.focus) {
-                                        if (target.focus) target.focus();
+                                        target.focus();
                                     }
                                 }
                             } catch (e) {
                                 reason = 'monaco_error:' + (e && e.message ? e.message : String(e));
                             }
+                        } else if (!ok && hasMonacoDom) {
+                            reason = 'monaco_dom_detected_but_api_unavailable';
                         }
 
                         // CodeMirror
-                        if (!ok) {
+                        if (!ok && !hasMonacoDom) {
                             try {
                                 const cmEls = Array.from(document.querySelectorAll('.CodeMirror'));
                                 for (const el of cmEls) {
                                     if (!visible(el)) continue;
                                     if (el.CodeMirror && typeof el.CodeMirror.setValue === 'function') {
+                                        el.CodeMirror.setValue('');
                                         el.CodeMirror.setValue(code);
                                         el.CodeMirror.focus();
                                         ok = true;
@@ -1967,12 +2204,13 @@ class EducoderFloatingAssistant {
                         }
 
                         // Ace
-                        if (!ok && window.ace && typeof window.ace.edit === 'function') {
+                        if (!ok && !hasMonacoDom && window.ace && typeof window.ace.edit === 'function') {
                             try {
                                 const aceEls = Array.from(document.querySelectorAll('.ace_editor'));
                                 for (const el of aceEls) {
                                     if (!visible(el)) continue;
                                     const editor = window.ace.edit(el);
+                                    editor.setValue('', -1);
                                     editor.setValue(code, -1);
                                     editor.focus();
                                     ok = true;
@@ -1985,12 +2223,13 @@ class EducoderFloatingAssistant {
                         }
 
                         // textarea
-                        if (!ok) {
+                        if (!ok && !hasMonacoDom) {
                             try {
                                 const textareas = Array.from(document.querySelectorAll('textarea'))
                                     .filter(el => !el.readOnly && !el.disabled && visible(el));
                                 for (const el of textareas) {
                                     el.focus();
+                                    el.value = '';
                                     el.value = code;
                                     el.dispatchEvent(new Event('input', { bubbles: true }));
                                     el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -2004,12 +2243,13 @@ class EducoderFloatingAssistant {
                         }
 
                         // contenteditable
-                        if (!ok) {
+                        if (!ok && !hasMonacoDom) {
                             try {
                                 const edits = Array.from(document.querySelectorAll('[contenteditable="true"]'))
                                     .filter(el => visible(el));
                                 for (const el of edits) {
                                     el.focus();
+                                    el.textContent = '';
                                     el.textContent = code;
                                     el.dispatchEvent(new Event('input', { bubbles: true }));
                                     ok = true;
@@ -2045,21 +2285,22 @@ class EducoderFloatingAssistant {
                 return false;
             }
 
+            const normalizedCode = (code || '').replace(/\r\n/g, '\n');
+
             const getEditors = window.monaco.editor.getEditors;
             if (typeof getEditors === 'function') {
                 const editors = getEditors.call(window.monaco.editor) || [];
-                const visibleEditors = editors.filter(editor => {
-                    try {
-                        const node = editor.getDomNode && editor.getDomNode();
-                        return node && this.isVisibleElement(node);
-                    } catch (e) {
+                const targetEditor = this.pickBestMonacoEditor(editors);
+                if (targetEditor) {
+                    targetEditor.setValue('');
+                    targetEditor.setValue(normalizedCode);
+                    const verify = typeof targetEditor.getValue === 'function'
+                        ? (targetEditor.getValue() || '').replace(/\r\n/g, '\n')
+                        : '';
+                    if (verify !== normalizedCode) {
                         return false;
                     }
-                });
-
-                const targetEditor = visibleEditors.find(editor => editor.hasTextFocus && editor.hasTextFocus()) || visibleEditors[0];
-                if (targetEditor) {
-                    targetEditor.setValue(code);
+                    this.tryFormatMonacoEditor(targetEditor);
                     if (targetEditor.focus) {
                         targetEditor.focus();
                     }
@@ -2068,8 +2309,15 @@ class EducoderFloatingAssistant {
             }
 
             const models = window.monaco.editor.getModels ? window.monaco.editor.getModels() : [];
-            if (models && models.length > 0) {
-                models[0].setValue(code);
+            if (models && models.length === 1) {
+                models[0].setValue('');
+                models[0].setValue(normalizedCode);
+                const verify = typeof models[0].getValue === 'function'
+                    ? (models[0].getValue() || '').replace(/\r\n/g, '\n')
+                    : '';
+                if (verify !== normalizedCode) {
+                    return false;
+                }
                 return true;
             }
         } catch (e) {
@@ -2077,6 +2325,75 @@ class EducoderFloatingAssistant {
         }
 
         return false;
+    }
+
+    pickBestMonacoEditor(editors) {
+        const active = document.activeElement;
+        const visibleEditors = (editors || []).filter(editor => {
+            try {
+                const node = editor.getDomNode && editor.getDomNode();
+                return node && this.isVisibleElement(node);
+            } catch (e) {
+                return false;
+            }
+        });
+
+        if (!visibleEditors.length) {
+            return null;
+        }
+
+        const activeMatch = visibleEditors.find(editor => {
+            try {
+                const node = editor.getDomNode && editor.getDomNode();
+                return node && active && node.contains(active);
+            } catch (e) {
+                return false;
+            }
+        });
+        if (activeMatch) {
+            return activeMatch;
+        }
+
+        const focusedMatch = visibleEditors.find(editor => {
+            try {
+                return editor.hasTextFocus && editor.hasTextFocus();
+            } catch (e) {
+                return false;
+            }
+        });
+        if (focusedMatch) {
+            return focusedMatch;
+        }
+
+        visibleEditors.sort((a, b) => {
+            const an = a.getDomNode && a.getDomNode();
+            const bn = b.getDomNode && b.getDomNode();
+            const aRect = an ? an.getBoundingClientRect() : { width: 0, height: 0 };
+            const bRect = bn ? bn.getBoundingClientRect() : { width: 0, height: 0 };
+            return (bRect.width * bRect.height) - (aRect.width * aRect.height);
+        });
+
+        return visibleEditors[0] || null;
+    }
+
+    tryFormatMonacoEditor(editor) {
+        try {
+            if (!editor || typeof editor.getAction !== 'function') {
+                return;
+            }
+
+            const formatAction = editor.getAction('editor.action.formatDocument');
+            if (formatAction && typeof formatAction.run === 'function') {
+                formatAction.run();
+            }
+
+            const reindentAction = editor.getAction('editor.action.reindentlines');
+            if (reindentAction && typeof reindentAction.run === 'function') {
+                reindentAction.run();
+            }
+        } catch (e) {
+            // ignore formatting errors
+        }
     }
 
     setCodeToCodeMirror(code) {

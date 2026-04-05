@@ -4,15 +4,21 @@ import platform
 import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
 import webbrowser
 import zipfile
 from io import BytesIO
 from pathlib import Path
+import re
+import shutil
 from tkinter import ttk, scrolledtext, messagebox
+from urllib.parse import quote
 
 import requests
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.edge.service import Service as EdgeService
 
@@ -76,7 +82,8 @@ class SimpleConfigManager:
             config = configparser.ConfigParser()
             config['SETTINGS'] = {
                 'first_run': 'True',
-                'last_edge_version': ''
+                'last_edge_version': '',
+                'last_chrome_version': ''
             }
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 config.write(f)
@@ -121,6 +128,36 @@ class SimpleConfigManager:
         except:
             return False
 
+    def get_last_chrome_version(self):
+        """获取上次记录的Chrome版本"""
+        try:
+            config = configparser.ConfigParser()
+            if os.path.exists(self.config_file):
+                config.read(self.config_file, encoding='utf-8')
+                if 'SETTINGS' in config and 'last_chrome_version' in config['SETTINGS']:
+                    return config['SETTINGS']['last_chrome_version']
+        except:
+            pass
+        return None
+
+    def save_chrome_version(self, version):
+        """保存Chrome版本到配置"""
+        try:
+            config = configparser.ConfigParser()
+            if os.path.exists(self.config_file):
+                config.read(self.config_file, encoding='utf-8')
+
+            if 'SETTINGS' not in config:
+                config['SETTINGS'] = {}
+
+            config['SETTINGS']['last_chrome_version'] = version
+
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                config.write(f)
+            return True
+        except:
+            return False
+
 
 class FloatingTipWindow:
     """悬浮提示窗口 - 无系统标题栏，显示在左上角"""
@@ -129,7 +166,7 @@ class FloatingTipWindow:
         self.parent = parent
         self.window = tk.Toplevel(parent)
         self.window.title("安装步骤")
-        self.window.geometry("700x400")  # 初始大小
+        self.window.geometry("780x460")  # 初始大小
 
         # 移除系统标题栏（最小化、最大化、关闭按钮）
         self.window.overrideredirect(True)
@@ -150,14 +187,27 @@ class FloatingTipWindow:
         self.window.bind('<B1-Motion>', self.on_move)
 
         self.current_step = 0
-        self.steps = [
-            "第一步：获取Edge浏览器版本",
-            "第二步：下载WebDriver",
-            "第三步：启动浏览器加载扩展",
+        self.browser_name = "浏览器"
+        self.steps_template = [
+            "第一步：获取{browser}版本",
+            "第二步：准备WebDriver",
+            "第三步：启动{browser}并加载扩展",
             "第四步：在桌面应用启动服务器后开始使用"
         ]
+        self.steps = self._build_steps()
 
         self.setup_ui()
+
+    def _build_steps(self):
+        return [step.format(browser=self.browser_name) for step in self.steps_template]
+
+    def set_browser_name(self, browser_name):
+        """更新悬浮步骤里的目标浏览器名称。"""
+        self.browser_name = browser_name
+        self.steps = self._build_steps()
+        for i, (_, step_label) in enumerate(getattr(self, 'step_labels', [])):
+            if i < len(self.steps):
+                step_label.config(text=self.steps[i])
 
     def set_top_left_position(self):
         """设置窗口位置为左上角"""
@@ -283,8 +333,8 @@ class OJAutoCompleteApp:
     def __init__(self, root):
         self.root = root
         self.root.title("浏览器拓展安装工具")
-        self.root.geometry("900x700")
-        self.root.minsize(760, 520)
+        self.root.geometry("1120x820")
+        self.root.minsize(900, 620)
 
         # 设置窗口居中
         self.center_window()
@@ -301,6 +351,9 @@ class OJAutoCompleteApp:
         # 状态变量
         self.driver = None
         self.is_running = False
+        self.success_window = None
+        self.last_installation_start_ts = 0.0
+        self.browser_var = tk.StringVar(value="chrome")
 
         # 设置UI
         self.setup_ui()
@@ -314,8 +367,8 @@ class OJAutoCompleteApp:
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
 
-        width = min(900, int(screen_width * 0.96))
-        height = min(700, int(screen_height * 0.93))
+        width = min(1120, int(screen_width * 0.98))
+        height = min(820, int(screen_height * 0.96))
 
         x = (screen_width - width) // 2
         y = (screen_height - height) // 2
@@ -355,9 +408,27 @@ class OJAutoCompleteApp:
             else:
                 install_dir = os.path.dirname(os.path.abspath(__file__))
 
-        # 扩展目录假设为安装目录下的"chrome"文件夹
-        extension_dir = os.path.join(install_dir, "chrome")
-        return extension_dir
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_dir = os.path.dirname(script_dir)
+
+        candidate_dirs = [
+            os.path.join(install_dir, "chrome"),
+            os.path.join(install_dir, "chrome", "chrome"),
+            os.path.join(install_dir, "OJAssistant", "chrome", "chrome"),
+            os.path.join(project_dir, "chrome"),
+            os.path.join(project_dir, "chrome", "chrome"),
+        ]
+
+        for candidate in candidate_dirs:
+            manifest_path = os.path.join(candidate, "manifest.json")
+            if os.path.exists(manifest_path):
+                self.log(f"✓ 使用扩展目录: {candidate}", "SUCCESS")
+                return candidate
+
+        # 回退到默认目录（兼容历史行为）
+        fallback = os.path.join(install_dir, "chrome")
+        self.log(f"未找到manifest.json，回退扩展目录: {fallback}", "WARNING")
+        return fallback
 
     def setup_ui(self):
         """设置主界面"""
@@ -385,7 +456,7 @@ class OJAutoCompleteApp:
         steps_frame.pack(fill='x', padx=15, pady=5)
 
         self.steps = [
-            "本工具将启动新的浏览器",
+            "本工具可启动新的 Chrome 或 Edge 浏览器",
             "您需重新登录头歌。",
             "若您想要将拓展安装到已有的浏览器",
             "请点击下方\"手动安装\"按钮查看教程"
@@ -404,11 +475,43 @@ class OJAutoCompleteApp:
             tk.Label(step_frame, text=step, font=('微软雅黑', 10),
                      bg='white', anchor='w').pack(side='left', padx=10)
 
+        # 浏览器选择
+        browser_frame = tk.LabelFrame(control_frame, text="目标浏览器",
+                                      font=('微软雅黑', 11, 'bold'),
+                                      bg='white', padx=15, pady=8)
+        browser_frame.pack(fill='x', padx=15, pady=5)
+
+        chrome_radio = tk.Radiobutton(
+            browser_frame,
+            text="Google Chrome（推荐）",
+            variable=self.browser_var,
+            value="chrome",
+            bg='white',
+            anchor='w',
+            font=('微软雅黑', 10)
+        )
+        chrome_radio.pack(fill='x', pady=2)
+
+        edge_radio = tk.Radiobutton(
+            browser_frame,
+            text="Microsoft Edge",
+            variable=self.browser_var,
+            value="edge",
+            bg='white',
+            anchor='w',
+            font=('微软雅黑', 10)
+        )
+        edge_radio.pack(fill='x', pady=2)
+
+        tk.Label(browser_frame,
+                 text="说明：Chrome 会优先尝试 Selenium Manager 自动适配驱动。",
+                 bg='white', fg='#666', font=('微软雅黑', 9), justify='left', wraplength=300).pack(fill='x', pady=(4, 0))
+
         # 操作按钮
         btn_frame = tk.Frame(control_frame, bg='white')
         btn_frame.pack(fill='x', padx=15, pady=20)
 
-        self.start_btn = tk.Button(btn_frame, text="▶ 开始安装或启动浏览器",
+        self.start_btn = tk.Button(btn_frame, text="▶ 开始安装并启动浏览器",
                                    font=('微软雅黑', 11),
                                    bg=self.primary_color, fg='white',
                                    command=self.start_installation,
@@ -463,73 +566,142 @@ class OJAutoCompleteApp:
 
     def log(self, message, level="INFO"):
         """输出日志到文本框"""
+        # 线程安全：子线程日志切回主线程更新UI
+        if threading.current_thread() is not threading.main_thread():
+            self.root.after(0, lambda: self.log(message, level))
+            return
+
         self.output_text.insert(tk.END, f"[{level}] {message}\n", level)
 
         # 滚动到底部
         self.output_text.see(tk.END)
-        self.root.update()
+        self.root.update_idletasks()
 
     def update_status(self, message):
         """更新状态栏"""
+        # 线程安全：子线程状态更新切回主线程
+        if threading.current_thread() is not threading.main_thread():
+            self.root.after(0, lambda: self.update_status(message))
+            return
+
         self.status_bar.config(text=f"状态: {message}")
-        self.root.update()
+        self.root.update_idletasks()
 
     def start_installation(self):
         """开始安装过程"""
+        now = time.time()
+
+        # 防抖，避免双击或事件重复触发导致多次启动
+        if now - self.last_installation_start_ts < 1.5:
+            self.log("安装流程已触发，请勿重复点击", "WARNING")
+            return
+
         if self.is_running:
             return
 
+        self.last_installation_start_ts = now
         self.is_running = True
         self.start_btn.config(state='disabled')
+        self.log("安装流程已启动", "INFO")
+        self.update_status("正在启动安装流程...")
 
         # 在新线程中运行安装过程
         thread = threading.Thread(target=self.run_installation)
         thread.daemon = True
         thread.start()
 
+    def get_selected_browser(self):
+        """获取用户选择的目标浏览器。"""
+        selected = (self.browser_var.get() or "chrome").strip().lower()
+        return selected if selected in ("chrome", "edge") else "chrome"
+
+    def get_selected_browser_name(self):
+        return "Google Chrome" if self.get_selected_browser() == "chrome" else "Microsoft Edge"
+
     def run_installation(self):
         """运行安装过程"""
         try:
-            # 步骤1：获取Edge版本
-            self.floating_tip.update_step(1)
-            self.update_status("获取Edge浏览器信息...")
-            self.log("正在获取Edge浏览器版本...", "INFO")
+            browser = self.get_selected_browser()
+            browser_name = self.get_selected_browser_name()
+            self.floating_tip.set_browser_name(browser_name)
+            self.log(f"当前选择浏览器: {browser_name}", "INFO")
 
-            edge_version = self.get_edge_version()
-            if edge_version:
-                self.log(f"✓ Edge浏览器版本: {edge_version}", "SUCCESS")
-                # 保存Edge版本到配置
-                self.config_manager.save_edge_version(edge_version)
+            if browser == "chrome":
+                # 步骤1：获取Chrome版本
+                self.floating_tip.update_step(1)
+                self.update_status("获取Chrome浏览器信息...")
+                self.log("正在获取Chrome浏览器版本...", "INFO")
+
+                chrome_version = self.get_chrome_version()
+                if chrome_version:
+                    self.log(f"✓ Chrome浏览器版本: {chrome_version}", "SUCCESS")
+                    self.config_manager.save_chrome_version(chrome_version)
+                else:
+                    self.log("未能获取Chrome版本，将继续使用Selenium Manager自动适配驱动", "WARNING")
+
+                # 步骤2：配置WebDriver
+                self.floating_tip.update_step(2)
+                self.update_status("配置Chrome WebDriver...")
+                self.log("开始配置Chrome WebDriver...", "INFO")
+
+                driver_path = self.setup_chromedriver(chrome_version)
+                if driver_path:
+                    self.log(f"✓ Chrome WebDriver已就绪: {driver_path}", "SUCCESS")
+                else:
+                    self.log("将使用Selenium Manager自动管理ChromeDriver", "INFO")
+
+                # 步骤3：加载扩展
+                self.floating_tip.update_step(3)
+                self.update_status("加载扩展程序...")
+                self.log("正在加载扩展程序...", "INFO")
+
+                # 步骤4：启动浏览器
+                self.floating_tip.update_step(4)
+                self.update_status("启动Chrome浏览器...")
+                self.log("正在启动Chrome浏览器...", "INFO")
+
+                self.driver = self.load_extension_in_chrome(driver_path)
             else:
-                self.log("✗ 无法获取Edge版本，请确保Edge已安装", "ERROR")
-                return
+                # 步骤1：获取Edge版本
+                self.floating_tip.update_step(1)
+                self.update_status("获取Edge浏览器信息...")
+                self.log("正在获取Edge浏览器版本...", "INFO")
 
-            # 步骤2：配置WebDriver
-            self.floating_tip.update_step(2)
-            self.update_status("配置Edge WebDriver...")
-            self.log("开始配置Edge WebDriver...", "INFO")
+                edge_version = self.get_edge_version()
+                if edge_version:
+                    self.log(f"✓ Edge浏览器版本: {edge_version}", "SUCCESS")
+                    # 保存Edge版本到配置
+                    self.config_manager.save_edge_version(edge_version)
+                else:
+                    self.log("✗ 无法获取Edge版本，请确保Edge已安装", "ERROR")
+                    return
 
-            driver_path = self.setup_edgedriver()
-            if not driver_path:
-                self.log("WebDriver配置失败", "ERROR")
-                return
+                # 步骤2：配置WebDriver
+                self.floating_tip.update_step(2)
+                self.update_status("配置Edge WebDriver...")
+                self.log("开始配置Edge WebDriver...", "INFO")
 
-            # 步骤3：加载扩展
-            self.floating_tip.update_step(3)
-            self.update_status("加载扩展程序...")
-            self.log("正在加载扩展程序...", "INFO")
+                driver_path = self.setup_edgedriver()
+                if not driver_path:
+                    self.log("WebDriver配置失败", "ERROR")
+                    return
 
-            # 步骤4：启动浏览器
-            self.floating_tip.update_step(4)
-            self.update_status("启动浏览器...")
-            self.log("正在启动浏览器...", "INFO")
+                # 步骤3：加载扩展
+                self.floating_tip.update_step(3)
+                self.update_status("加载扩展程序...")
+                self.log("正在加载扩展程序...", "INFO")
 
-            self.driver = self.load_extension_in_edge(driver_path)
+                # 步骤4：启动浏览器
+                self.floating_tip.update_step(4)
+                self.update_status("启动Edge浏览器...")
+                self.log("正在启动Edge浏览器...", "INFO")
+
+                self.driver = self.load_extension_in_edge(driver_path)
 
             if self.driver:
-                self.log("✓ 浏览器启动成功！", "SUCCESS")
-                self.update_status("就绪 - 浏览器已启动")
-                self.show_success_dialog()
+                self.log(f"✓ {browser_name}启动成功！", "SUCCESS")
+                self.update_status(f"就绪 - {browser_name}已启动")
+                self.show_success_dialog(browser_name)
             else:
                 self.log("✗ 浏览器启动失败", "ERROR")
 
@@ -583,6 +755,92 @@ class OJAutoCompleteApp:
         except Exception as e:
             self.log(f"获取Edge版本时出错: {e}", "ERROR")
             return None
+
+    def get_chrome_version(self):
+        """获取Chrome浏览器版本（Windows/Linux/macOS）。"""
+        try:
+            if platform.system() == "Windows" and winreg is not None:
+                reg_candidates = [
+                    (winreg.HKEY_CURRENT_USER, r"Software\Google\Chrome\BLBeacon", "version"),
+                    (winreg.HKEY_LOCAL_MACHINE, r"Software\Google\Chrome\BLBeacon", "version"),
+                    (winreg.HKEY_LOCAL_MACHINE, r"Software\WOW6432Node\Google\Chrome\BLBeacon", "version"),
+                ]
+                for hive, reg_path, value_name in reg_candidates:
+                    try:
+                        with winreg.OpenKey(hive, reg_path) as key:
+                            version, _ = winreg.QueryValueEx(key, value_name)
+                            if version:
+                                return str(version)
+                    except OSError:
+                        continue
+
+            commands = []
+            if platform.system() == "Linux":
+                commands = ["google-chrome", "google-chrome-stable", "chromium-browser", "chromium"]
+            elif platform.system() == "Darwin":
+                commands = [
+                    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+                ]
+            else:
+                commands = ["chrome", "google-chrome", "chromium"]
+
+            for cmd in commands:
+                bin_path = shutil.which(cmd) if not os.path.isabs(cmd) else cmd
+                if not bin_path or not os.path.exists(bin_path):
+                    continue
+
+                try:
+                    result = subprocess.run([bin_path, "--version"], capture_output=True, text=True, timeout=8)
+                    output = (result.stdout or result.stderr or "").strip()
+                    match = re.search(r"(\d+\.\d+\.\d+\.\d+)", output)
+                    if match:
+                        return match.group(1)
+                except Exception:
+                    continue
+
+            return None
+        except Exception as e:
+            self.log(f"获取Chrome版本时出错: {e}", "ERROR")
+            return None
+
+    def find_chromedriver(self):
+        """查找可用的Chrome WebDriver。"""
+        driver_name = "chromedriver.exe" if platform.system() == "Windows" else "chromedriver"
+
+        driver_dir = self.config_manager.get_driver_dir()
+        direct_path = os.path.join(driver_dir, driver_name)
+        if os.path.exists(direct_path):
+            self.log(f"✓ 在用户数据目录中找到ChromeDriver: {direct_path}", "SUCCESS")
+            return direct_path
+
+        if os.path.exists(driver_dir):
+            for root, _, files in os.walk(driver_dir):
+                if driver_name in files:
+                    found_path = os.path.join(root, driver_name)
+                    self.log(f"✓ 在用户数据子目录中找到ChromeDriver: {found_path}", "SUCCESS")
+                    return found_path
+
+        current_dir = os.getcwd()
+        current_path = os.path.join(current_dir, driver_name)
+        if os.path.exists(current_path):
+            self.log(f"✓ 在当前目录中找到ChromeDriver: {current_path}", "SUCCESS")
+            return current_path
+
+        self.log("未找到本地ChromeDriver", "WARNING")
+        return None
+
+    def setup_chromedriver(self, chrome_version=None):
+        """设置Chrome WebDriver。优先使用本地驱动，否则交给Selenium Manager。"""
+        driver_path = self.find_chromedriver()
+        if driver_path:
+            return driver_path
+
+        if chrome_version:
+            self.log(f"Chrome版本: {chrome_version}", "INFO")
+
+        # selenium>=4.6 支持自动驱动管理
+        return None
 
     def setup_edgedriver(self):
         """设置Edge WebDriver"""
@@ -765,18 +1023,73 @@ class OJAutoCompleteApp:
             self.log(f"启动浏览器时出错: {e}", "ERROR")
             return None
 
-    def show_success_dialog(self):
+    def load_extension_in_chrome(self, driver_path=None):
+        """加载扩展并启动Chrome浏览器。"""
+        try:
+            chrome_options = ChromeOptions()
+
+            extension_dir = self.get_extension_dir()
+            manifest_file = os.path.join(extension_dir, "manifest.json")
+
+            if os.path.exists(extension_dir) and os.path.exists(manifest_file):
+                chrome_options.add_argument(f'--load-extension={extension_dir}')
+                chrome_options.add_argument(f'--disable-extensions-except={extension_dir}')
+                self.log("✓ Chrome扩展已添加到启动参数", "SUCCESS")
+            else:
+                self.log(f"✗ 扩展目录或manifest不存在: {extension_dir}", "WARNING")
+
+            chrome_options.add_argument("--start-maximized")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--no-sandbox")
+
+            # 禁用自动化提示
+            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+            chrome_options.add_experimental_option("detach", True)
+
+            self.log("正在启动Chrome浏览器...", "INFO")
+            if driver_path and os.path.exists(driver_path):
+                service = ChromeService(driver_path)
+                driver = webdriver.Chrome(service=service, options=chrome_options)
+            else:
+                # 使用 Selenium Manager 自动解析本机匹配驱动
+                driver = webdriver.Chrome(options=chrome_options)
+
+            self.log("✓ Chrome浏览器启动成功", "SUCCESS")
+            driver.get('https://www.educoder.net/')
+            return driver
+        except Exception as e:
+            self.log(f"启动Chrome浏览器时出错: {e}", "ERROR")
+            return None
+
+    def show_success_dialog(self, browser_name="浏览器"):
         """显示成功对话框"""
+        if self.success_window and self.success_window.winfo_exists():
+            self.success_window.lift()
+            self.success_window.focus_force()
+            return
+
         success_window = tk.Toplevel(self.root)
+        self.success_window = success_window
         success_window.title("安装成功")
-        success_window.geometry("600x400")
+        success_window.geometry("760x520")
+        success_window.minsize(620, 420)
         success_window.resizable(True, True)
+
+        def _on_close_success_window():
+            self.success_window = None
+            success_window.destroy()
+
+        success_window.protocol("WM_DELETE_WINDOW", _on_close_success_window)
 
         # 居中显示
         self.root.update_idletasks()
-        x = self.root.winfo_rootx() + (self.root.winfo_width() - 400) // 2
-        y = self.root.winfo_rooty() + (self.root.winfo_height() - 250) // 2
-        success_window.geometry(f"+{x}+{y}")
+        screen_width = success_window.winfo_screenwidth()
+        screen_height = success_window.winfo_screenheight()
+        width = min(760, int(screen_width * 0.9))
+        height = min(520, int(screen_height * 0.85))
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
+        success_window.geometry(f"{width}x{height}+{x}+{y}")
 
         # 成功图标
         tk.Label(success_window, text="✅", font=('Arial', 48)).pack(pady=20)
@@ -785,12 +1098,12 @@ class OJAutoCompleteApp:
         tk.Label(success_window, text="安装成功！",
                  font=('微软雅黑', 16, 'bold')).pack(pady=10)
 
-        tk.Label(success_window, text="拓展已成功安装，请在浏览器内打开头歌开始体验",
-                 font=('微软雅黑', 10)).pack(pady=5)
+        tk.Label(success_window, text=f"拓展已成功安装并启动 {browser_name}，请在浏览器内打开头歌开始体验",
+                 font=('微软雅黑', 10), wraplength=560, justify='center').pack(pady=5)
 
         # 确定按钮
         tk.Button(success_window, text="确定",
-                  command=success_window.destroy,
+                  command=_on_close_success_window,
                   width=15, padx=10, pady=5).pack(pady=10)
 
     def show_manual_guide(self):
@@ -801,20 +1114,64 @@ class OJAutoCompleteApp:
         # 创建一个选择浏览器对话框
         browser_dialog = tk.Toplevel(self.root)
         browser_dialog.title("选择浏览器")
-        browser_dialog.geometry("400x600")
+        browser_dialog.geometry("680x760")
+        browser_dialog.minsize(560, 620)
         browser_dialog.configure(bg='white')
         browser_dialog.transient(self.root)
         browser_dialog.grab_set()
 
         # 居中显示
         self.root.update_idletasks()
-        x = self.root.winfo_rootx() + (self.root.winfo_width() - 400) // 2
-        y = self.root.winfo_rooty() + (self.root.winfo_height() - 400) // 2
-        browser_dialog.geometry(f"+{x}+{y}")
+        screen_width = browser_dialog.winfo_screenwidth()
+        screen_height = browser_dialog.winfo_screenheight()
+        width = min(680, int(screen_width * 0.92))
+        height = min(760, int(screen_height * 0.92))
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
+        browser_dialog.geometry(f"{width}x{height}+{x}+{y}")
 
-        # 内容
-        content_frame = tk.Frame(browser_dialog, bg='white', padx=20, pady=20)
-        content_frame.pack(fill=tk.BOTH, expand=True)
+        # 内容（滚动区域，避免小屏幕截断）
+        container = tk.Frame(browser_dialog, bg='white')
+        container.pack(fill=tk.BOTH, expand=True)
+
+        canvas = tk.Canvas(container, bg='white', highlightthickness=0, borderwidth=0)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        content_frame = tk.Frame(canvas, bg='white', padx=20, pady=20)
+
+        content_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        frame_window = canvas.create_window((0, 0), window=content_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        def _on_canvas_resize(event):
+            canvas.itemconfig(frame_window, width=event.width)
+
+        canvas.bind("<Configure>", _on_canvas_resize)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        def _on_mousewheel(event):
+            if event.num == 4:
+                delta = -1
+            elif event.num == 5:
+                delta = 1
+            elif getattr(event, "delta", 0):
+                delta = int(-1 * (event.delta / 120))
+            else:
+                delta = 0
+
+            if delta:
+                canvas.yview_scroll(delta, "units")
+
+        canvas.bind("<MouseWheel>", _on_mousewheel)
+        canvas.bind("<Button-4>", _on_mousewheel)
+        canvas.bind("<Button-5>", _on_mousewheel)
+        content_frame.bind("<MouseWheel>", _on_mousewheel)
+        content_frame.bind("<Button-4>", _on_mousewheel)
+        content_frame.bind("<Button-5>", _on_mousewheel)
 
         tk.Label(content_frame,
                  text="请选择您要安装扩展的浏览器：",
@@ -827,7 +1184,7 @@ class OJAutoCompleteApp:
                  font=('微软雅黑', 9),
                  bg='white',
                  fg='#666',
-                 wraplength=350,
+                 wraplength=620,
                  justify='left').pack(pady=(0, 20))
 
         # Chrome按钮
@@ -901,7 +1258,7 @@ class OJAutoCompleteApp:
         """打开Chrome扩展安装页面"""
         browser_dialog.destroy()
         # 构建包含扩展目录参数的URL
-        chrome_url = f"https://yhsun.cn/educoder/chrome.html?file={extension_dir}"
+        chrome_url = f"https://yhsun.cn/educoder/chrome.html?file={quote(extension_dir)}"
         webbrowser.open(chrome_url)
         self.show_install_instructions("Chrome")
 
@@ -909,7 +1266,7 @@ class OJAutoCompleteApp:
         """打开Edge扩展安装页面"""
         browser_dialog.destroy()
         # 构建包含扩展目录参数的URL
-        edge_url = f"https://yhsun.cn/educoder/edge.html?file={extension_dir}"
+        edge_url = f"https://yhsun.cn/educoder/edge.html?file={quote(extension_dir)}"
         webbrowser.open(edge_url)
         self.show_install_instructions("Edge")
 

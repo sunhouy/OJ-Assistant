@@ -166,6 +166,14 @@ class InputSimulator:
             # 安装ESC键监听
             self._install_esc_hook()
 
+            # 先聚焦到目标编辑器，再清空现有内容
+            try:
+                screen_width, screen_height = pyautogui.size()
+                pyautogui.click(x=screen_width // 2, y=screen_height // 2)
+                time.sleep(0.08)
+            except Exception:
+                pass
+
             # 输入前先清空编辑器
             self._clear_editor_before_input()
 
@@ -232,6 +240,14 @@ class InputSimulator:
 
                 # 安装ESC键监听
                 self._install_esc_hook()
+
+                # 先聚焦到目标编辑器，再清空现有内容
+                try:
+                    screen_width, screen_height = pyautogui.size()
+                    pyautogui.click(x=screen_width // 2, y=screen_height // 2)
+                    time.sleep(0.08)
+                except Exception:
+                    pass
 
                 # 检查ESC键
                 if self.esc_pressed:

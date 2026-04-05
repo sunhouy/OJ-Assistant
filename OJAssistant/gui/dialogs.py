@@ -3,6 +3,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -15,6 +16,8 @@ class FirstRunDialog:
         self.config_manager = ConfigManager()  # 创建 ConfigManager 实例
         self.dont_show_again = tk.BooleanVar(value=False)
         self.on_close_callback = on_close_callback  # 关闭对话框时的回调函数
+        self.extension_setup_process = None
+        self.last_extension_setup_launch_ts = 0.0
 
         # 尝试导入 extension_setup 模块
         try:
@@ -27,7 +30,7 @@ class FirstRunDialog:
         # 创建对话框
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("安装浏览器扩展")
-        self.dialog.geometry("820x760")
+        self.dialog.geometry("960x840")
         # 设置背景色为白色
         self.dialog.configure(bg='white')
         self.dialog.resizable(True, True)
@@ -35,14 +38,14 @@ class FirstRunDialog:
         self.dialog.grab_set()
 
         # 设置窗口最小尺寸
-        self.dialog.minsize(560, 460)
+        self.dialog.minsize(640, 520)
 
         # 设置现代化样式
         self.setup_styles()
         self.setup_ui()
         self.fit_dialog_to_screen()
 
-    def fit_dialog_to_screen(self, min_width=560, min_height=460, max_width_ratio=0.96, max_height_ratio=0.95):
+    def fit_dialog_to_screen(self, min_width=640, min_height=520, max_width_ratio=0.98, max_height_ratio=0.97):
         """根据内容和屏幕大小调整欢迎窗口，确保内容可完整访问。"""
         self.dialog.update_idletasks()
 
@@ -385,6 +388,15 @@ class FirstRunDialog:
     def open_extension_install(self):
         """打开浏览器扩展安装工具"""
         try:
+            now = time.time()
+            if now - self.last_extension_setup_launch_ts < 1.5:
+                return
+
+            if self.extension_setup_process and self.extension_setup_process.poll() is None:
+                messagebox.showinfo("提示", "扩展安装工具已在运行中")
+                return
+
+            self.last_extension_setup_launch_ts = now
             self._launch_extension_setup_process()
 
         except Exception as e:
@@ -401,7 +413,7 @@ class FirstRunDialog:
         if os.name == "nt" and hasattr(subprocess, "CREATE_NEW_CONSOLE"):
             kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
 
-        subprocess.Popen([sys.executable, script_path], **kwargs)
+        self.extension_setup_process = subprocess.Popen([sys.executable, script_path], **kwargs)
 
     def _run_extension_setup_thread(self):
         """在新线程中运行扩展安装工具"""

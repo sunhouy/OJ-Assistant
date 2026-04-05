@@ -1,4 +1,5 @@
 ﻿import json
+import re
 from datetime import datetime
 
 import websockets
@@ -57,10 +58,22 @@ class OJAssistant:
                             data = json.loads(message)
 
                             if data.get('type') in ('OJ_content_auto_input', 'educoder_content_auto_input'):
+                                question_content = data.get('content', {}) or {}
+                                existing_code = (
+                                    data.get('current_code')
+                                    or data.get('existing_code')
+                                    or data.get('editor_code')
+                                    or question_content.get('current_code')
+                                    or question_content.get('existing_code')
+                                    or ''
+                                )
                                 await websocket.send(json.dumps({
                                     "type": "server_ack",
                                     "stage": "content_received",
                                     "message": "已收到题目内容，开始生成代码",
+                                    "existing_code_length": len(existing_code or ''),
+                                    "editor_code_source": data.get('editor_code_source', 'unknown'),
+                                    "editor_code_reason": data.get('editor_code_reason', ''),
                                     "timestamp": datetime.now().isoformat()
                                 }, ensure_ascii=False))
                                 await self.handle_OJ_content_auto_input(websocket, data)
@@ -122,7 +135,14 @@ class OJAssistant:
 
             question_content = data.get('content', {})
             question_text = question_content.get('text', '')
-            existing_code = data.get('current_code', '') or ''
+            existing_code = (
+                data.get('current_code')
+                or data.get('existing_code')
+                or data.get('editor_code')
+                or question_content.get('current_code')
+                or question_content.get('existing_code')
+                or ''
+            )
 
             # 发送题目内容到远程协助服务器（如果已启动）
             try:
@@ -228,8 +248,20 @@ class OJAssistant:
 
             test_results = data.get('results', {})
             test_text = test_results.get('text', '')
-            current_code = data.get('currentCode', '')
+            current_code = (
+                data.get('currentCode')
+                or data.get('current_code')
+                or data.get('existing_code')
+                or data.get('editor_code')
+                or self.current_code
+                or self.current_existing_code
+                or ''
+            )
+            current_code_source = data.get('editor_code_source', 'unknown')
+            current_code_reason = data.get('editor_code_reason', '')
             has_error = data.get('has_error', False)  # 获取前端传来的错误标记
+
+            self.gui.log(f"智能纠错代码长度: {len(current_code)} 字符, 来源: {current_code_source}, 原因: {current_code_reason}")
 
             # 直接使用前端传来的错误标记
             should_fix = has_error
@@ -492,6 +524,20 @@ class OJAssistant:
             if response.choices and response.choices[0].message.content:
                 full_code = response.choices[0].message.content
                 cleaned_code = self.clean_code_response(full_code)
+
+                is_complete, reason = self._is_complete_revised_code(cleaned_code, previous_code)
+                if not is_complete:
+                    self.gui.log(f"纠错输出可能不完整({reason})，尝试自动重试一次")
+                    retry_code = await self._retry_revised_code_with_failures(
+                        original_question,
+                        test_results_text,
+                        previous_code,
+                        cleaned_code,
+                        reason,
+                    )
+                    if retry_code:
+                        cleaned_code = retry_code
+
                 return cleaned_code
             else:
                 self.gui.log("代码重新生成失败")
@@ -500,6 +546,73 @@ class OJAssistant:
         except Exception as e:
             self.gui.log(f"代码重新生成失败: {e}")
             return None
+
+    def _is_complete_revised_code(self, code, previous_code=""):
+        """检查纠错输出是否像完整代码。"""
+        text = (code or "").strip()
+        if not text:
+            return False, "empty_output"
+
+        if len(text) < 20:
+            return False, "too_short"
+
+        if previous_code and previous_code.strip():
+            prev_len = len(previous_code.strip())
+            if len(text) < max(20, int(prev_len * 0.6)):
+                return False, "much_shorter_than_previous"
+
+        return True, "ok"
+
+    async def _retry_revised_code_with_failures(
+        self,
+        original_question,
+        test_results_text,
+        previous_code,
+        first_try_code,
+        incomplete_reason,
+    ):
+        """纠错输出不完整时重试一次。"""
+        try:
+            retry_prompt = self._build_retry_prompt(original_question, test_results_text, previous_code) + f"""
+
+上一轮纠错输出被判定为不完整，原因：{incomplete_reason}
+上一轮输出如下：
+{first_try_code}
+
+请重新输出完整最终代码文件（包含所有原有和修复后的代码，不能省略任何未改动部分）。
+"""
+
+            retry_response = await self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": self._get_retry_system_prompt()
+                    },
+                    {
+                        "role": "user",
+                        "content": retry_prompt
+                    }
+                ],
+                max_tokens=8192,
+                temperature=0,
+                stream=False
+            )
+
+            if retry_response.choices and retry_response.choices[0].message.content:
+                retry_code = self.clean_code_response(retry_response.choices[0].message.content)
+                is_complete, retry_reason = self._is_complete_revised_code(retry_code, previous_code)
+                if is_complete:
+                    self.gui.log("纠错重试成功，已获得完整代码")
+                    return retry_code
+
+                self.gui.log(f"纠错重试后仍不完整({retry_reason})，保留较长输出")
+                return retry_code if len(retry_code or "") > len(first_try_code or "") else first_try_code
+
+            return first_try_code
+        except Exception as e:
+            self.gui.log(f"纠错重试失败: {e}")
+            return first_try_code
 
     def _build_retry_prompt(self, original_question, test_results_text, previous_code):
         """构建重试提示词"""
@@ -532,6 +645,7 @@ class OJAssistant:
 2. 修正之前代码中的错误
 3. 确保新代码能够通过所有测试用例
 4. 只返回纯代码，不要有任何解释
+5. 必须返回完整最终代码文件，不能只返回修改片段或省略未改动部分
 
 请生成修复后的完整{lang_name}代码：
 """
@@ -555,6 +669,7 @@ class OJAssistant:
 1. 只返回纯代码，不要有任何解释、注释或额外文字
 2. 绝对不要使用任何代码块标记
 3. 代码必须完整且可运行
+    4. 必须返回完整最终代码文件，不能只返回局部补丁或伪代码
 专注于修复已知的错误，确保代码通过所有测试。"""
         return system_prompt
 
@@ -585,6 +700,14 @@ class OJAssistant:
             if response.choices and response.choices[0].message.content:
                 full_code = response.choices[0].message.content
                 cleaned_code = self.clean_code_response(full_code)
+
+                is_complete, reason = self._is_complete_code_response(cleaned_code, existing_code)
+                if not is_complete:
+                    self.gui.log(f"首轮代码可能不完整({reason})，尝试自动重试一次")
+                    retry_code = await self._retry_complete_code_solution(question_text, existing_code, cleaned_code, reason)
+                    if retry_code:
+                        cleaned_code = retry_code
+
                 self.gui.log(f"完整{self.current_language.upper()}代码解决方案获取成功，长度: {len(cleaned_code)} 字符")
                 return cleaned_code
             else:
@@ -619,7 +742,8 @@ class OJAssistant:
             base_prompt += """
 4. 用户编辑器中已有代码是不可改动的既有内容（包括空格、缩进、换行和注释），你必须严格保留，不得删除、重排、重命名或修改任何已有字符
 5. 只能在原有代码基础上补充缺失部分（例如 TODO 区域、空函数体、占位逻辑）
-6. 若必须新增代码，必须插入到不破坏既有内容的位置，且不修改任何既有行的文本内容"""
+6. 若必须新增代码，必须插入到不破坏既有内容的位置，且不修改任何既有行的文本内容
+7. 你必须返回“完整最终代码”，内容里必须包含已有代码和新增代码，禁止只返回补丁、片段或差异说明"""
 
         return base_prompt
 
@@ -697,45 +821,92 @@ class OJAssistant:
 
         return f"""
 请根据以下编程题目要求，只提供完整的{lang_name}代码解决方案，不要包含任何解释、注释或其他文本。
+必须输出“完整最终代码文件”（不是补丁、不是片段），并包含编辑器已有代码与新增实现。
 {requirements}
     {existing_code_block}
 题目内容：
 {question_text}
 """
 
+    def _is_complete_code_response(self, code, existing_code=""):
+        """检查模型输出是否看起来像完整代码。"""
+        text = (code or "").strip()
+        if not text:
+            return False, "empty_output"
+
+        if len(text) < 20:
+            return False, "too_short"
+
+        # 已有代码存在时，输出不应明显短于已有代码
+        if existing_code and existing_code.strip():
+            existing_text = existing_code.strip()
+            if len(text) < max(20, int(len(existing_text) * 0.9)):
+                return False, "shorter_than_existing_code"
+
+            # 至少应包含已有代码中的首尾非空行，避免只返回片段
+            existing_lines = [ln.strip() for ln in existing_code.splitlines() if ln.strip()]
+            if existing_lines:
+                head = existing_lines[0]
+                tail = existing_lines[-1]
+                if head not in text or tail not in text:
+                    return False, "missing_existing_head_or_tail"
+
+        return True, "ok"
+
+    async def _retry_complete_code_solution(self, question_text, existing_code, previous_code, reason):
+        """当首轮输出可能不完整时进行一次重试。"""
+        try:
+            retry_prompt = self._build_prompt(question_text, existing_code) + f"""
+
+上一轮输出被判定为不完整，原因：{reason}
+上一轮输出如下：
+{previous_code}
+
+请重新输出完整最终代码（必须包含已有代码与新增实现），不要任何解释文字。
+"""
+
+            retry_response = await self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": self._get_system_prompt(bool(existing_code and existing_code.strip()))
+                    },
+                    {
+                        "role": "user",
+                        "content": retry_prompt
+                    }
+                ],
+                max_tokens=8192,
+                temperature=0,
+                stream=False
+            )
+
+            if retry_response.choices and retry_response.choices[0].message.content:
+                retry_code = self.clean_code_response(retry_response.choices[0].message.content)
+                is_complete, retry_reason = self._is_complete_code_response(retry_code, existing_code)
+                if is_complete:
+                    self.gui.log("重试成功，已获得完整代码输出")
+                    return retry_code
+
+                self.gui.log(f"重试后仍不完整({retry_reason})，保留较长版本")
+                return retry_code if len(retry_code or "") > len(previous_code or "") else previous_code
+
+            return previous_code
+        except Exception as e:
+            self.gui.log(f"重试获取完整代码失败: {e}")
+            return previous_code
+
     def clean_code_response(self, response):
         """清理API响应，确保只包含代码"""
+        text = (response or "").strip()
+        if not text:
+            return text
 
-        lines = response.split('\n')
-        cleaned_lines = []
+        # 若返回包含Markdown代码块，提取最长代码块；否则保持原文，避免误删合法注释/行。
+        code_blocks = re.findall(r"```(?:[\w#+\-.]*)?\s*\n([\s\S]*?)```", text)
+        if code_blocks:
+            candidate = max(code_blocks, key=lambda block: len((block or "").strip()))
+            return (candidate or "").strip('\n')
 
-        in_code_block = False
-        for line in lines:
-            stripped_line = line.strip()
-            if stripped_line.startswith('```'):
-                in_code_block = not in_code_block
-                continue
-
-            if not in_code_block:
-                if self.current_language in ["C", "C++", "C#", "Java"]:
-                    if stripped_line.startswith('//'):
-                        continue
-                    if stripped_line.startswith('/*'):
-                        continue
-                    if stripped_line.endswith('*/'):
-                        continue
-                elif self.current_language == "Python":
-                    if stripped_line.startswith('#'):
-                        continue
-                elif self.current_language == "Javascript":
-                    if stripped_line.startswith('//'):
-                        continue
-                    if stripped_line.startswith('/*'):
-                        continue
-                    if stripped_line.endswith('*/'):
-                        continue
-
-            cleaned_lines.append(line)
-
-        cleaned_response = '\n'.join(cleaned_lines).strip()
-        return cleaned_response if cleaned_response else response
+        return text
