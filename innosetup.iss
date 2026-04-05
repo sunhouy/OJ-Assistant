@@ -13,6 +13,12 @@
 #ifndef MyOutputBaseFilename
 	#define MyOutputBaseFilename "Setup"
 #endif
+#ifndef MyInstallerLanguageName
+	#define MyInstallerLanguageName "english"
+#endif
+#ifndef MyInstallerLanguageFile
+	#define MyInstallerLanguageFile "compiler:Default.isl"
+#endif
 #define MyAppAssocName "OJFile"
 #define MyAppAssocExt ".myp"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
@@ -51,7 +57,7 @@ SolidCompression=yes
 WizardStyle=modern
 
 [Languages]
-Name: "chinese"; MessagesFile: "compiler:Chinese.isl"
+Name: "{#MyInstallerLanguageName}"; MessagesFile: "{#MyInstallerLanguageFile}"
 
 [Files]
 Source: "dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
