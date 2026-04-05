@@ -8,11 +8,11 @@ build/
 dist/
 test/
 Output/
-OJAssistant/__pycache__
 OJAssistant/chrome/chrome_test/node_modules/
 
 web/educoder/css
 web/educoder/images
 web/educoder/static
+__pycache__/
 
 OJ助手.spec
