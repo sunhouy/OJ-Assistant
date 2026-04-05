@@ -388,6 +388,8 @@ class OJAutoCompleteApp:
         self.last_installation_start_ts = 0.0
         self.current_install_task_id = 0
         self.last_success_task_id = -1
+        self.install_run_lock_file = os.path.join(self.config_manager.data_dir, "install_run.lock")
+        self.install_run_lock_owned = False
         self.browser_var = tk.StringVar(value="chrome")
 
         # 设置UI
@@ -634,6 +636,19 @@ class OJAutoCompleteApp:
         if self.is_running:
             return
 
+        # 已存在有效浏览器会话时，不再重复拉起新的浏览器窗口
+        if self._has_active_browser_session():
+            browser_name = self.get_selected_browser_name()
+            self.log(f"检测到已有{browser_name}会话，已跳过重复启动", "WARNING")
+            self.update_status(f"就绪 - {browser_name}已启动")
+            return
+
+        # 跨进程安装流程锁：防止多个安装器实例同时启动浏览器
+        if not self._try_acquire_install_run_lock():
+            self.log("检测到另一个安装流程正在运行，请稍后再试", "WARNING")
+            self.update_status("另一个安装流程正在运行")
+            return
+
         self.current_install_task_id += 1
         task_id = self.current_install_task_id
         self.last_installation_start_ts = now
@@ -643,9 +658,15 @@ class OJAutoCompleteApp:
         self.update_status("正在启动安装流程...")
 
         # 在新线程中运行安装过程
-        thread = threading.Thread(target=self.run_installation, args=(task_id,))
-        thread.daemon = True
-        thread.start()
+        try:
+            thread = threading.Thread(target=self.run_installation, args=(task_id,))
+            thread.daemon = True
+            thread.start()
+        except Exception:
+            self.is_running = False
+            self._run_on_ui(self.start_btn.config, state='normal')
+            self._release_install_run_lock()
+            raise
 
     def get_selected_browser(self):
         """获取用户选择的目标浏览器。"""
@@ -661,6 +682,80 @@ class OJAutoCompleteApp:
             func(*args, **kwargs)
         else:
             self.root.after(0, lambda: func(*args, **kwargs))
+
+    def _is_pid_alive(self, pid):
+        """检查PID是否仍然存活。"""
+        if not isinstance(pid, int) or pid <= 0:
+            return False
+
+        try:
+            os.kill(pid, 0)
+        except PermissionError:
+            return True
+        except OSError:
+            return False
+
+        return True
+
+    def _try_acquire_install_run_lock(self):
+        """获取跨进程安装流程锁。"""
+        if self.install_run_lock_owned:
+            return True
+
+        for _ in range(2):
+            try:
+                fd = os.open(self.install_run_lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                with os.fdopen(fd, 'w', encoding='utf-8') as lock_file:
+                    lock_file.write(str(os.getpid()))
+                self.install_run_lock_owned = True
+                return True
+            except FileExistsError:
+                stale_pid = None
+                try:
+                    with open(self.install_run_lock_file, 'r', encoding='utf-8') as lock_file:
+                        stale_pid = int((lock_file.read() or '0').strip() or '0')
+                except Exception:
+                    stale_pid = None
+
+                if stale_pid and self._is_pid_alive(stale_pid):
+                    return False
+
+                try:
+                    os.remove(self.install_run_lock_file)
+                except OSError:
+                    return False
+            except Exception as e:
+                self.log(f"安装锁创建失败，回退到进程内保护: {e}", "WARNING")
+                return not self.is_running
+
+        return False
+
+    def _release_install_run_lock(self):
+        """释放跨进程安装流程锁。"""
+        if not self.install_run_lock_owned:
+            return
+
+        self.install_run_lock_owned = False
+        try:
+            if os.path.exists(self.install_run_lock_file):
+                os.remove(self.install_run_lock_file)
+        except OSError:
+            pass
+
+    def _has_active_browser_session(self):
+        """检测当前实例是否已经持有可用浏览器会话。"""
+        if not self.driver:
+            return False
+
+        try:
+            if not getattr(self.driver, 'session_id', None):
+                return False
+
+            handles = self.driver.window_handles
+            return bool(handles)
+        except Exception:
+            self.driver = None
+            return False
 
     def _update_step(self, step_index):
         self._run_on_ui(self.floating_tip.update_step, step_index)
@@ -714,7 +809,10 @@ class OJAutoCompleteApp:
                 self.update_status("启动Chrome浏览器...")
                 self.log("正在启动Chrome浏览器...", "INFO")
 
-                self.driver = self.load_extension_in_chrome(driver_path)
+                if self._has_active_browser_session():
+                    self.log("检测到已有Chrome会话，跳过重复启动", "WARNING")
+                else:
+                    self.driver = self.load_extension_in_chrome(driver_path)
             else:
                 # 步骤1：获取Edge版本
                 self._update_step(1)
@@ -750,7 +848,10 @@ class OJAutoCompleteApp:
                 self.update_status("启动Edge浏览器...")
                 self.log("正在启动Edge浏览器...", "INFO")
 
-                self.driver = self.load_extension_in_edge(driver_path)
+                if self._has_active_browser_session():
+                    self.log("检测到已有Edge会话，跳过重复启动", "WARNING")
+                else:
+                    self.driver = self.load_extension_in_edge(driver_path)
 
             if self.driver:
                 self.log(f"✓ {browser_name}启动成功！", "SUCCESS")
@@ -764,6 +865,7 @@ class OJAutoCompleteApp:
         finally:
             self.is_running = False
             self._run_on_ui(self.start_btn.config, state='normal')
+            self._release_install_run_lock()
 
     def get_edge_version(self):
         """获取Edge浏览器版本"""

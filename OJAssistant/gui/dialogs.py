@@ -1,5 +1,6 @@
 ﻿import configparser
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -396,6 +397,10 @@ class FirstRunDialog:
                 messagebox.showinfo("提示", "扩展安装工具已在运行中")
                 return
 
+            if self._is_extension_setup_running_globally():
+                messagebox.showinfo("提示", "扩展安装工具已在运行中")
+                return
+
             self.last_extension_setup_launch_ts = now
             self._launch_extension_setup_process()
 
@@ -414,6 +419,14 @@ class FirstRunDialog:
             kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
 
         self.extension_setup_process = subprocess.Popen([sys.executable, script_path], **kwargs)
+
+    def _is_extension_setup_running_globally(self):
+        """通过安装器单实例监听端口判断是否已有实例在运行。"""
+        try:
+            with socket.create_connection(("127.0.0.1", 48573), timeout=0.25):
+                return True
+        except OSError:
+            return False
 
     def _run_extension_setup_thread(self):
         """在新线程中运行扩展安装工具"""
