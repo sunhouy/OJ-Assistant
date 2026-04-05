@@ -1,6 +1,8 @@
 import configparser
+import atexit
 import os
 import platform
+import socket
 import subprocess
 import sys
 import threading
@@ -26,6 +28,37 @@ try:
     import winreg  # type: ignore[import-not-found]
 except ImportError:
     winreg = None
+
+
+_INSTANCE_LOCK_SOCKET = None
+_INSTANCE_LOCK_PORT = 48573
+
+
+def acquire_single_instance_lock():
+    """进程级单实例锁，防止重复启动安装工具。"""
+    global _INSTANCE_LOCK_SOCKET
+    if _INSTANCE_LOCK_SOCKET is not None:
+        return True
+
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("127.0.0.1", _INSTANCE_LOCK_PORT))
+        sock.listen(1)
+        _INSTANCE_LOCK_SOCKET = sock
+        return True
+    except OSError:
+        return False
+
+
+def release_single_instance_lock():
+    """释放进程级单实例锁。"""
+    global _INSTANCE_LOCK_SOCKET
+    if _INSTANCE_LOCK_SOCKET is not None:
+        try:
+            _INSTANCE_LOCK_SOCKET.close()
+        except Exception:
+            pass
+        _INSTANCE_LOCK_SOCKET = None
 
 
 def get_install_dir_from_registry():
@@ -353,6 +386,8 @@ class OJAutoCompleteApp:
         self.is_running = False
         self.success_window = None
         self.last_installation_start_ts = 0.0
+        self.current_install_task_id = 0
+        self.last_success_task_id = -1
         self.browser_var = tk.StringVar(value="chrome")
 
         # 设置UI
@@ -599,6 +634,8 @@ class OJAutoCompleteApp:
         if self.is_running:
             return
 
+        self.current_install_task_id += 1
+        task_id = self.current_install_task_id
         self.last_installation_start_ts = now
         self.is_running = True
         self.start_btn.config(state='disabled')
@@ -606,7 +643,7 @@ class OJAutoCompleteApp:
         self.update_status("正在启动安装流程...")
 
         # 在新线程中运行安装过程
-        thread = threading.Thread(target=self.run_installation)
+        thread = threading.Thread(target=self.run_installation, args=(task_id,))
         thread.daemon = True
         thread.start()
 
@@ -618,17 +655,34 @@ class OJAutoCompleteApp:
     def get_selected_browser_name(self):
         return "Google Chrome" if self.get_selected_browser() == "chrome" else "Microsoft Edge"
 
-    def run_installation(self):
+    def _run_on_ui(self, func, *args, **kwargs):
+        """确保UI相关调用在主线程执行。"""
+        if threading.current_thread() is threading.main_thread():
+            func(*args, **kwargs)
+        else:
+            self.root.after(0, lambda: func(*args, **kwargs))
+
+    def _update_step(self, step_index):
+        self._run_on_ui(self.floating_tip.update_step, step_index)
+
+    def _show_success_once(self, browser_name, task_id):
+        """同一次安装流程只显示一次成功窗口。"""
+        if task_id == self.last_success_task_id:
+            return
+        self.last_success_task_id = task_id
+        self.show_success_dialog(browser_name)
+
+    def run_installation(self, task_id):
         """运行安装过程"""
         try:
             browser = self.get_selected_browser()
             browser_name = self.get_selected_browser_name()
-            self.floating_tip.set_browser_name(browser_name)
+            self._run_on_ui(self.floating_tip.set_browser_name, browser_name)
             self.log(f"当前选择浏览器: {browser_name}", "INFO")
 
             if browser == "chrome":
                 # 步骤1：获取Chrome版本
-                self.floating_tip.update_step(1)
+                self._update_step(1)
                 self.update_status("获取Chrome浏览器信息...")
                 self.log("正在获取Chrome浏览器版本...", "INFO")
 
@@ -640,7 +694,7 @@ class OJAutoCompleteApp:
                     self.log("未能获取Chrome版本，将继续使用Selenium Manager自动适配驱动", "WARNING")
 
                 # 步骤2：配置WebDriver
-                self.floating_tip.update_step(2)
+                self._update_step(2)
                 self.update_status("配置Chrome WebDriver...")
                 self.log("开始配置Chrome WebDriver...", "INFO")
 
@@ -651,19 +705,19 @@ class OJAutoCompleteApp:
                     self.log("将使用Selenium Manager自动管理ChromeDriver", "INFO")
 
                 # 步骤3：加载扩展
-                self.floating_tip.update_step(3)
+                self._update_step(3)
                 self.update_status("加载扩展程序...")
                 self.log("正在加载扩展程序...", "INFO")
 
                 # 步骤4：启动浏览器
-                self.floating_tip.update_step(4)
+                self._update_step(4)
                 self.update_status("启动Chrome浏览器...")
                 self.log("正在启动Chrome浏览器...", "INFO")
 
                 self.driver = self.load_extension_in_chrome(driver_path)
             else:
                 # 步骤1：获取Edge版本
-                self.floating_tip.update_step(1)
+                self._update_step(1)
                 self.update_status("获取Edge浏览器信息...")
                 self.log("正在获取Edge浏览器版本...", "INFO")
 
@@ -677,7 +731,7 @@ class OJAutoCompleteApp:
                     return
 
                 # 步骤2：配置WebDriver
-                self.floating_tip.update_step(2)
+                self._update_step(2)
                 self.update_status("配置Edge WebDriver...")
                 self.log("开始配置Edge WebDriver...", "INFO")
 
@@ -687,12 +741,12 @@ class OJAutoCompleteApp:
                     return
 
                 # 步骤3：加载扩展
-                self.floating_tip.update_step(3)
+                self._update_step(3)
                 self.update_status("加载扩展程序...")
                 self.log("正在加载扩展程序...", "INFO")
 
                 # 步骤4：启动浏览器
-                self.floating_tip.update_step(4)
+                self._update_step(4)
                 self.update_status("启动Edge浏览器...")
                 self.log("正在启动Edge浏览器...", "INFO")
 
@@ -701,7 +755,7 @@ class OJAutoCompleteApp:
             if self.driver:
                 self.log(f"✓ {browser_name}启动成功！", "SUCCESS")
                 self.update_status(f"就绪 - {browser_name}已启动")
-                self.show_success_dialog(browser_name)
+                self._run_on_ui(self._show_success_once, browser_name, task_id)
             else:
                 self.log("✗ 浏览器启动失败", "ERROR")
 
@@ -709,7 +763,7 @@ class OJAutoCompleteApp:
             self.log(f"安装过程中出现错误: {str(e)}", "ERROR")
         finally:
             self.is_running = False
-            self.start_btn.config(state='normal')
+            self._run_on_ui(self.start_btn.config, state='normal')
 
     def get_edge_version(self):
         """获取Edge浏览器版本"""
@@ -1281,9 +1335,18 @@ class OJAutoCompleteApp:
 
 
 def main():
+    if not acquire_single_instance_lock():
+        print("BrowserExtensionTool is already running; skipping duplicate launch.")
+        return
+
+    atexit.register(release_single_instance_lock)
+
     root = tk.Tk()
-    app = OJAutoCompleteApp(root)
-    root.mainloop()
+    OJAutoCompleteApp(root)
+    try:
+        root.mainloop()
+    finally:
+        release_single_instance_lock()
 
 
 if __name__ == "__main__":

@@ -1,8 +1,18 @@
 #define MyAppName "OJ助手"
-#define MyAppVersion "1.0"
+#ifndef MyAppVersion
+	#define MyAppVersion "1.0"
+#endif
 #define MyAppPublisher "Sun Houyun"
 #define MyAppURL "https://yhsun.cn/educoder/"
-#define MyAppExeName "OJ助手.exe"
+#ifndef MyAppExeName
+	#define MyAppExeName "OJ助手.exe"
+#endif
+#ifndef MyOutputDir
+	#define MyOutputDir "Output"
+#endif
+#ifndef MyOutputBaseFilename
+	#define MyOutputBaseFilename "Setup"
+#endif
 #define MyAppAssocName "OJFile"
 #define MyAppAssocExt ".myp"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
@@ -34,8 +44,8 @@ DisableProgramGroupPage=yes
 LicenseFile=license.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
-OutputDir=Output
-OutputBaseFilename=Setup
+OutputDir={#MyOutputDir}
+OutputBaseFilename={#MyOutputBaseFilename}
 SetupIconFile=app.ico
 SolidCompression=yes
 WizardStyle=modern

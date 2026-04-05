@@ -42,6 +42,23 @@
 ## 工作原理
 
 ## 部署与测试
+### GitHub Actions 自动构建与自动发布
+项目已支持 GitHub Actions 自动构建并发布 Release，覆盖 Windows、Linux、macOS 三端安装包。
+
+触发方式：
+1. 自动发布：推送标签（例如 `v1.2.3`）后自动构建并发布 Release。
+2. 手动发布：在 GitHub Actions 页面手动运行 `Build And Release`，并填写 `release_tag`。
+
+默认产物：
+1. Windows：Inno Setup 安装包（`*-setup.exe`）和便携版压缩包（`*-portable.zip`）。
+2. Linux：包含 `install.sh`/`uninstall.sh` 的安装包（`*.tar.gz`）。
+3. macOS：`*.dmg` 与 `*.zip` 安装包。
+
+本地构建（可选）：
+1. 安装依赖：`pip install -r requirements.txt`
+2. 执行构建：`python setup.py --version v1.2.3`
+
+说明：macOS 与 Windows 产物默认未签名，首次运行可能出现系统安全提示。
 
 ## 联系
 18763177732@139.com

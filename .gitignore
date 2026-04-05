@@ -6,6 +6,8 @@
 
 build/
 dist/
+artifacts/
+package-temp/
 test/
 Output/
 OJAssistant/chrome/chrome_test/node_modules/
@@ -16,3 +18,4 @@ web/educoder/static
 __pycache__/
 
 OJ助手.spec
+OJAssistant.spec
