@@ -63,7 +63,7 @@ jobs:
           - os: ubuntu-latest
             name: linux
             artifact_name: linux-artifacts
-          - os: macos-13
+          - os: macos-latest
             name: macos
             artifact_name: macos-artifacts
 
