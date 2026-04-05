@@ -10,9 +10,15 @@ import webbrowser
 from tkinter import ttk, scrolledtext, messagebox
 
 import psutil
-import pystray
 import requests
 from PIL import Image, ImageDraw
+
+try:
+    import pystray  # type: ignore[import-not-found]
+    PYSTRAY_AVAILABLE = True
+except ImportError:
+    pystray = None
+    PYSTRAY_AVAILABLE = False
 
 from __init__ import version
 from core.server import ServerManager
@@ -20,8 +26,6 @@ from gui.input_test import TestInputDialog
 from gui.language_manager import LanguageManager
 from gui.update_window import UpdateWindow
 from utils.config import ConfigManager
-
-PYSTRAY_AVAILABLE = True
 
 from utils.extension_setup import main as run_extension_setup
 
@@ -52,6 +56,7 @@ class OJGUI:
         self.tray_icon = None
         self.tray_icon_thread = None
         self.is_minimized_to_tray = False
+        self._responsive_layout_mode = None
 
         # 会员状态相关变量
         self.is_member = False
@@ -90,7 +95,8 @@ class OJGUI:
 
         # 设置窗口属性
         self.root.title("OJ助手")
-        self.root.geometry("1000x750")
+        self.root.withdraw()
+        self.root.minsize(900, 640)
         self.root.resizable(True, True)
 
         # 设置关闭窗口的处理
@@ -109,6 +115,185 @@ class OJGUI:
 
         # 先检查会员状态，然后根据状态决定是否启动服务器
         self.check_member_status_and_start()
+
+    def fit_window_to_content(self, min_width=980, min_height=700, max_width_ratio=0.98, max_height_ratio=0.97):
+        """根据当前UI内容调整窗口初始尺寸，并居中显示。"""
+        self.root.update_idletasks()
+
+        width = max(min_width, self.root.winfo_reqwidth())
+        height = max(min_height, self.root.winfo_reqheight())
+
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        max_width = int(screen_width * max_width_ratio)
+        max_height = int(screen_height * max_height_ratio)
+
+        width = min(width, max_width)
+        height = min(height, max_height)
+
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+
+    def _start_deferred_initialization(self):
+        """首屏显示后再执行耗时初始化，避免阻塞界面渲染。"""
+        self.check_current_autostart()
+        self.log(f"初始语言设置为: {self.selected_language.get().upper()}")
+        self.status_var.set("界面已就绪，正在加载模型列表...")
+        self.load_models(async_load=True)
+
+    def _reset_grid_weights(self, frame, max_columns=6):
+        for index in range(max_columns):
+            frame.columnconfigure(index, weight=0)
+
+    def _layout_button_grid(self, buttons, columns):
+        self._reset_grid_weights(self.button_frame, max_columns=6)
+        for button in buttons:
+            button.grid_forget()
+
+        for index, button in enumerate(buttons):
+            row = index // columns
+            column = index % columns
+            self.button_frame.columnconfigure(column, weight=1)
+            button.grid(row=row, column=column, padx=2, pady=2, sticky=tk.EW)
+
+    def _layout_member_actions(self, mode):
+        self.member_button.grid_forget()
+        self.activate_button.grid_forget()
+        self.member_action_frame.grid_forget()
+
+        if mode == "compact":
+            self.member_action_frame.grid(row=1, column=0, sticky=tk.W, pady=(6, 0))
+            self.member_button.grid(row=0, column=0, sticky=tk.W, padx=(0, 0), pady=(0, 4))
+            self.activate_button.grid(row=1, column=0, sticky=tk.W)
+        else:
+            self.member_action_frame.grid(row=1, column=0, sticky=tk.W, pady=(6, 0))
+            self.member_button.grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
+            self.activate_button.grid(row=0, column=1, sticky=tk.W)
+
+    def _layout_options(self, mode):
+        self.copy_paste_check.grid_forget()
+        self.lang_frame.grid_forget()
+        self.options_frame_row1.grid_forget()
+
+        self.show_log_check.grid_forget()
+        self.autostart_check.grid_forget()
+        self.minimize_to_tray_check.grid_forget()
+        self.options_frame_row2.grid_forget()
+
+        if mode == "compact":
+            self.options_frame_row1.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0))
+            self.options_frame_row1.columnconfigure(0, weight=1)
+            self.copy_paste_check.grid(row=0, column=0, sticky=tk.W)
+            self.lang_frame.grid(row=1, column=0, sticky=tk.W, pady=(8, 0))
+
+            self.options_frame_row2.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
+            self.show_log_check.grid(row=0, column=0, sticky=tk.W, pady=1)
+            self.autostart_check.grid(row=1, column=0, sticky=tk.W, pady=1)
+            self.minimize_to_tray_check.grid(row=2, column=0, sticky=tk.W, pady=1)
+        else:
+            self.options_frame_row1.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0))
+            self.options_frame_row1.columnconfigure(0, weight=1)
+            self.options_frame_row1.columnconfigure(1, weight=1)
+            self.copy_paste_check.grid(row=0, column=0, sticky=tk.W)
+            self.lang_frame.grid(row=0, column=1, sticky=tk.W, padx=(20, 0))
+
+            self.options_frame_row2.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
+            self.show_log_check.grid(row=0, column=0, sticky=tk.W, padx=(0, 20))
+            self.autostart_check.grid(row=0, column=1, sticky=tk.W, padx=(0, 20))
+            self.minimize_to_tray_check.grid(row=0, column=2, sticky=tk.W)
+
+    def _layout_links(self, mode):
+        for widget in self.link_widgets:
+            widget.grid_forget()
+
+        self._reset_grid_weights(self.links_frame, max_columns=4)
+
+        if mode == "wide":
+            self.help_link.grid(row=0, column=0, sticky=tk.W, padx=(0, 20))
+            self.terms_link.grid(row=0, column=1, sticky=tk.W, padx=(0, 20))
+            self.license_link.grid(row=0, column=2, sticky=tk.W, padx=(0, 20))
+            self.home_link.grid(row=0, column=3, sticky=tk.W)
+            for column in range(4):
+                self.links_frame.columnconfigure(column, weight=1)
+        elif mode == "medium":
+            self.help_link.grid(row=0, column=0, sticky=tk.W, padx=(0, 20), pady=1)
+            self.terms_link.grid(row=0, column=1, sticky=tk.W, pady=1)
+            self.license_link.grid(row=1, column=0, sticky=tk.W, padx=(0, 20), pady=1)
+            self.home_link.grid(row=1, column=1, sticky=tk.W, pady=1)
+            for column in range(2):
+                self.links_frame.columnconfigure(column, weight=1)
+        else:
+            self.help_link.grid(row=0, column=0, sticky=tk.W, pady=1)
+            self.terms_link.grid(row=1, column=0, sticky=tk.W, pady=1)
+            self.license_link.grid(row=2, column=0, sticky=tk.W, pady=1)
+            self.home_link.grid(row=3, column=0, sticky=tk.W, pady=1)
+            self.links_frame.columnconfigure(0, weight=1)
+
+    def _layout_server_controls(self, mode):
+        self.start_button.pack_forget()
+        self.stop_button.pack_forget()
+        self.server_button_frame.grid_forget()
+
+        if mode == "compact":
+            self.server_button_frame.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=(5, 0))
+            self.start_button.pack(side=tk.TOP, anchor=tk.W, pady=(0, 5))
+            self.stop_button.pack(side=tk.TOP, anchor=tk.W)
+        else:
+            self.server_button_frame.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=(5, 0))
+            self.start_button.pack(side=tk.LEFT, padx=(0, 5))
+            self.stop_button.pack(side=tk.LEFT)
+
+    def _apply_responsive_layout(self, available_width=None):
+        required_attributes = [
+            "top_action_buttons",
+            "button_frame",
+            "member_button",
+            "activate_button",
+            "member_action_frame",
+            "copy_paste_check",
+            "lang_frame",
+            "options_frame_row1",
+            "show_log_check",
+            "autostart_check",
+            "minimize_to_tray_check",
+            "options_frame_row2",
+            "start_button",
+            "stop_button",
+            "server_button_frame",
+            "links_frame",
+            "link_widgets",
+            "help_link",
+            "terms_link",
+            "license_link",
+            "home_link",
+        ]
+        if not all(hasattr(self, attribute) for attribute in required_attributes):
+            return
+
+        if available_width is None:
+            available_width = self.root.winfo_width()
+
+        if available_width >= 1200:
+            mode = "wide"
+        elif available_width >= 900:
+            mode = "medium"
+        else:
+            mode = "compact"
+
+        if mode == self._responsive_layout_mode:
+            return
+
+        self._responsive_layout_mode = mode
+
+        button_columns = 5 if mode == "wide" else 3 if mode == "medium" else 2
+        self._layout_button_grid(self.top_action_buttons, button_columns)
+        self._layout_member_actions(mode)
+        self._layout_options(mode)
+        self._layout_server_controls(mode)
+        self._layout_links(mode)
+
+        self.root.update_idletasks()
 
     def load_config(self):
         """加载配置设置"""
@@ -205,8 +390,44 @@ class OJGUI:
 
     def setup_ui(self):
         """设置用户界面"""
-        # 创建主框架
-        main_frame = ttk.Frame(self.root, padding="10")
+        # 创建可滚动主框架
+        content_host = ttk.Frame(self.root)
+        content_host.pack(fill=tk.BOTH, expand=True)
+
+        canvas = tk.Canvas(content_host, highlightthickness=0, borderwidth=0)
+        scrollbar = ttk.Scrollbar(content_host, orient="vertical", command=canvas.yview)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        main_frame = ttk.Frame(canvas, padding="10")
+        canvas_window = canvas.create_window((0, 0), window=main_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        def update_scrollregion(_event=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def sync_canvas_width(event):
+            canvas.itemconfigure(canvas_window, width=event.width)
+            self._apply_responsive_layout(event.width)
+
+        def on_mousewheel(event):
+            if canvas.winfo_height() >= main_frame.winfo_reqheight():
+                return
+
+            if event.num == 4:
+                delta = -1
+            elif event.num == 5:
+                delta = 1
+            else:
+                delta = -1 if event.delta > 0 else 1
+
+            canvas.yview_scroll(delta, "units")
+
+        main_frame.bind("<Configure>", update_scrollregion)
+        canvas.bind("<Configure>", sync_canvas_width)
+        canvas.bind_all("<MouseWheel>", on_mousewheel)
+        canvas.bind_all("<Button-4>", on_mousewheel)
+        canvas.bind_all("<Button-5>", on_mousewheel)
 
         style = ttk.Style()
         style.configure("TLabel", foreground="#333", font=('微软雅黑', 10))
@@ -230,21 +451,22 @@ class OJGUI:
 
         # 添加检测更新按钮、输入测试按钮、安装拓展按钮和退出登录按钮
         button_frame = ttk.Frame(user_frame)
-        button_frame.grid(row=0, column=1, sticky=tk.E)
-
-        ttk.Button(button_frame, text="输入测试", command=self.open_test_input_dialog, width=10).pack(side=tk.LEFT,
-                                                                                                      padx=2)
-        ttk.Button(button_frame, text="检测更新", command=self.check_update, width=10).pack(side=tk.LEFT, padx=2)
-
-        ttk.Button(button_frame, text="启动浏览器", command=self.open_extension_setup, width=10).pack(side=tk.LEFT,
-                                                                                                      padx=2)
-        ttk.Button(button_frame, text="远程协助", command=self.open_remote_assist_dialog, width=10).pack(side=tk.LEFT,
-                                                                                                      padx=2)
-        ttk.Button(button_frame, text="退出登录", command=self.logout, width=10).pack(side=tk.LEFT, padx=2)
+        button_frame.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(8, 0))
+        self.top_action_buttons = []
+        for index, (text, command) in enumerate([
+            ("输入测试", self.open_test_input_dialog),
+            ("检测更新", self.check_update),
+            ("启动浏览器", self.open_extension_setup),
+            ("远程协助", self.open_remote_assist_dialog),
+            ("退出登录", self.logout),
+        ]):
+            button = ttk.Button(button_frame, text=text, command=command, width=10)
+            self.top_action_buttons.append(button)
 
         # 会员状态区域
         member_status_frame = ttk.Frame(main_frame)
         member_status_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        member_status_frame.columnconfigure(0, weight=1)
 
         # 会员状态标签 - 使用红色字体显示到期信息
         self.member_status_var = tk.StringVar(value="正在检查会员状态...")
@@ -255,25 +477,28 @@ class OJGUI:
         )
         self.member_status_label.grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
 
+        member_action_frame = ttk.Frame(member_status_frame)
+        member_action_frame.grid(row=1, column=0, sticky=tk.W, pady=(6, 0))
+
         # 开通会员按钮
         self.member_button = ttk.Button(
-            member_status_frame,
+            member_action_frame,
             text="开通会员",
             command=self.open_member_page,
             width=10,
             state="disabled"  # 初始状态为禁用，等检查完会员状态后再启用
         )
-        self.member_button.grid(row=0, column=1, sticky=tk.E, padx=(0, 5))
+        self.member_button.grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
 
         # 新增激活会员按钮
         self.activate_button = ttk.Button(
-            member_status_frame,
+            member_action_frame,
             text="激活会员",
             command=self.open_activate_dialog,
             width=10,
             state="normal"
         )
-        self.activate_button.grid(row=0, column=2, sticky=tk.E)
+        self.activate_button.grid(row=0, column=1, sticky=tk.W)
 
         # 模型选择区域
         model_frame = ttk.LabelFrame(main_frame, text="模型选择", padding="5")
@@ -281,7 +506,7 @@ class OJGUI:
         model_frame.columnconfigure(1, weight=1)
 
         # 第一行：模型选择
-        ttk.Label(model_frame, text="选择AI模型").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
+        ttk.Label(model_frame, text="选择AI模型").grid(row=0, column=0, columnspan=3, sticky=tk.W, padx=(0, 5))
 
         # 模型选择下拉框
         self.model_combo = ttk.Combobox(
@@ -290,7 +515,7 @@ class OJGUI:
             state="readonly",
             width=30
         )
-        self.model_combo.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=(0, 5))
+        self.model_combo.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), padx=(0, 5), pady=(4, 0))
         self.model_combo.bind('<<ComboboxSelected>>', self.on_model_changed)
 
         # 刷新模型列表按钮
@@ -299,7 +524,7 @@ class OJGUI:
             text="刷新列表",
             command=self.load_models,
             width=10
-        ).grid(row=0, column=2, sticky=tk.E)
+        ).grid(row=1, column=2, sticky=tk.E, pady=(4, 0))
 
         # 第二行：添加模型按钮
         ttk.Button(
@@ -307,7 +532,7 @@ class OJGUI:
             text="添加模型",
             command=self.open_add_model_dialog,
             width=10
-        ).grid(row=1, column=0, sticky=tk.W, pady=(10, 0))
+        ).grid(row=2, column=0, sticky=tk.W, pady=(10, 0))
 
         # 第二行：删除模型按钮
         ttk.Button(
@@ -315,10 +540,10 @@ class OJGUI:
             text="删除模型",
             command=self.delete_selected_model,
             width=10
-        ).grid(row=1, column=1, sticky=tk.W, pady=(10, 0), padx=(5, 0))
+        ).grid(row=2, column=1, sticky=tk.W, pady=(10, 0), padx=(5, 0))
 
         # API Key输入框
-        ttk.Label(model_frame, text="API Key").grid(row=2, column=0, sticky=tk.W, padx=(0, 5), pady=(10, 0))
+        ttk.Label(model_frame, text="API Key").grid(row=3, column=0, sticky=tk.W, padx=(0, 5), pady=(10, 0))
         self.api_key_var = tk.StringVar()
         self.api_key_entry = ttk.Entry(
             model_frame,
@@ -326,18 +551,18 @@ class OJGUI:
             width=50,
             show="*"  # 隐藏输入内容
         )
-        self.api_key_entry.grid(row=2, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=(10, 0), padx=(0, 5))
+        self.api_key_entry.grid(row=3, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=(10, 0), padx=(0, 5))
         self.api_key_entry.bind('<KeyRelease>', self.on_api_key_changed)
 
         # API基础URL输入框
-        ttk.Label(model_frame, text="API基础URL").grid(row=3, column=0, sticky=tk.W, padx=(0, 5), pady=(5, 0))
+        ttk.Label(model_frame, text="API基础URL").grid(row=4, column=0, sticky=tk.W, padx=(0, 5), pady=(5, 0))
         self.base_url_var = tk.StringVar()
         self.base_url_entry = ttk.Entry(
             model_frame,
             textvariable=self.base_url_var,
             width=50
         )
-        self.base_url_entry.grid(row=3, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0), padx=(0, 5))
+        self.base_url_entry.grid(row=4, column=1, columnspan=2, sticky=(tk.W, tk.E), pady=(5, 0), padx=(0, 5))
         self.base_url_entry.bind('<KeyRelease>', self.on_base_url_changed)
 
         # 当前模型信息标签
@@ -346,11 +571,12 @@ class OJGUI:
             model_frame,
             textvariable=self.model_info_var,
             font=("微软雅黑", 9)
-        ).grid(row=4, column=0, columnspan=3, sticky=tk.W, pady=(5, 0))
+        ).grid(row=5, column=0, columnspan=3, sticky=tk.W, pady=(5, 0))
 
         # 配置选项区域 - 第一行
         options_frame_row1 = ttk.Frame(main_frame)
-        options_frame_row1.grid(row=3, column=0, columnspan=3, sticky=tk.W, pady=(5, 0))
+        options_frame_row1.grid(row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0))
+        options_frame_row1.columnconfigure(0, weight=1)
 
         # 复制粘贴模式选项
         ttk.Checkbutton(
@@ -358,11 +584,12 @@ class OJGUI:
             text="启用复制粘贴模式（一次性输入完整代码）",
             variable=self.use_copy_paste,
             command=self.on_copy_paste_changed
-        ).pack(side=tk.LEFT)
+        )
+        self.copy_paste_check = options_frame_row1.winfo_children()[-1]
 
         # 语言选择和自定义语言按钮框架
         lang_frame = ttk.Frame(options_frame_row1)
-        lang_frame.pack(side=tk.LEFT, padx=(20, 0))
+        self.lang_frame = lang_frame
 
         ttk.Label(lang_frame, text="选择编程语言").pack(side=tk.LEFT, padx=(0, 5))
 
@@ -392,7 +619,8 @@ class OJGUI:
 
         # 配置选项区域 - 第二行
         options_frame_row2 = ttk.Frame(main_frame)
-        options_frame_row2.grid(row=4, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        options_frame_row2.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(0, 5))
+        options_frame_row2.columnconfigure(0, weight=1)
 
         # 新增日志显示复选框
         ttk.Checkbutton(
@@ -400,7 +628,8 @@ class OJGUI:
             text="显示日志",
             variable=self.show_log_var,
             command=self.on_show_log_changed
-        ).pack(side=tk.LEFT, padx=(0, 20))
+        )
+        self.show_log_check = options_frame_row2.winfo_children()[-1]
 
         # 新增开机自启复选框
         ttk.Checkbutton(
@@ -408,7 +637,8 @@ class OJGUI:
             text="开机自启",
             variable=self.autostart_var,
             command=self.on_autostart_changed
-        ).pack(side=tk.LEFT, padx=(0, 20))
+        )
+        self.autostart_check = options_frame_row2.winfo_children()[-1]
 
         # 关闭时最小化到托盘复选框
         ttk.Checkbutton(
@@ -416,7 +646,8 @@ class OJGUI:
                 text="关闭时最小化到托盘",
                 variable=self.minimize_to_tray_var,
                 command=self.on_minimize_to_tray_changed
-        ).pack(side=tk.LEFT)
+        )
+        self.minimize_to_tray_check = options_frame_row2.winfo_children()[-1]
 
         # 服务器控制区域
         server_frame = ttk.LabelFrame(main_frame, text="服务器控制", padding="5")
@@ -426,15 +657,19 @@ class OJGUI:
         self.server_status_var = tk.StringVar(value="服务器状态: 等待会员状态检查...")
         ttk.Label(server_frame, textvariable=self.server_status_var).grid(row=0, column=0, sticky=tk.W)
 
-        self.start_button = ttk.Button(server_frame, text="启动服务器", command=self.start_server, state="disabled")
-        self.start_button.grid(row=0, column=1, padx=5)
+        server_button_frame = ttk.Frame(server_frame)
+        server_button_frame.grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=(5, 0))
+        self.server_button_frame = server_button_frame
 
-        self.stop_button = ttk.Button(server_frame, text="停止服务器", command=self.stop_server, state="disabled")
-        self.stop_button.grid(row=0, column=2, padx=5)
+        self.start_button = ttk.Button(server_button_frame, text="启动服务器", command=self.start_server, state="disabled")
+        self.start_button.pack(side=tk.LEFT, padx=(0, 5))
+
+        self.stop_button = ttk.Button(server_button_frame, text="停止服务器", command=self.stop_server, state="disabled")
+        self.stop_button.pack(side=tk.LEFT)
 
         # 连接信息
         ttk.Label(server_frame, text="使用浏览器拓展前必须启动本地服务器").grid(
-            row=1, column=0, columnspan=3, sticky=tk.W, pady=2
+            row=2, column=0, columnspan=3, sticky=tk.W, pady=2
         )
 
         # 当前语言显示
@@ -442,7 +677,7 @@ class OJGUI:
             server_frame,
             text=f"当前语言: {self.selected_language.get().upper()}"
         )
-        self.current_lang_label.grid(row=2, column=0, columnspan=3, sticky=tk.W, pady=2)
+        self.current_lang_label.grid(row=3, column=0, columnspan=3, sticky=tk.W, pady=2)
 
         # 状态显示
         self.status_var = tk.StringVar(value="正在检查会员状态...")
@@ -467,6 +702,7 @@ class OJGUI:
         # 添加超链接区域
         links_frame = ttk.Frame(main_frame)
         links_frame.grid(row=8, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(10, 0))
+        links_frame.columnconfigure(0, weight=1)
 
         # 帮助中心超链接
         help_link = tk.Label(
@@ -476,7 +712,6 @@ class OJGUI:
             cursor="hand2",
             font=("TkDefaultFont", 10)
         )
-        help_link.pack(side=tk.LEFT, padx=(0, 20))
         help_link.bind("<Button-1>", lambda e: webbrowser.open("https://yhsun.cn/educoder/help"))
 
         # 用户协议与隐私政策超链接
@@ -487,7 +722,6 @@ class OJGUI:
             cursor="hand2",
             font=("TkDefaultFont", 10)
         )
-        terms_link.pack(side=tk.LEFT, padx=(0, 20))
         terms_link.bind("<Button-1>", lambda e: webbrowser.open("https://yhsun.cn/educoder/terms/"))
 
         # 开放源代码许可超链接
@@ -498,31 +732,40 @@ class OJGUI:
             cursor="hand2",
             font=("TkDefaultFont", 10)
         )
-        license_link.pack(side=tk.LEFT)
         license_link.bind("<Button-1>", lambda e: webbrowser.open("https://yhsun.cn/educoder/license"))
 
         # 快捷键说明超链接
-        license_link = tk.Label(
+        home_link = tk.Label(
             links_frame,
-            text="",
+            text="官方主页",
             fg="blue",
             cursor="hand2",
             font=("TkDefaultFont", 10)
         )
-        license_link.pack(side=tk.LEFT)
-        license_link.bind("<Button-1>", lambda e: webbrowser.open("https://yhsun.cn/educoder/"))
+        home_link.bind("<Button-1>", lambda e: webbrowser.open("https://yhsun.cn/educoder/"))
+
+        self.help_link = help_link
+        self.terms_link = terms_link
+        self.license_link = license_link
+        self.home_link = home_link
+        self.link_widgets = [self.help_link, self.terms_link, self.license_link, self.home_link]
+
+        self.button_frame = button_frame
+        self.member_action_frame = member_action_frame
+        self.options_frame_row1 = options_frame_row1
+        self.options_frame_row2 = options_frame_row2
+        self.links_frame = links_frame
+
+        self._apply_responsive_layout(self.root.winfo_screenwidth())
 
         # 启动日志处理
         self.process_log_queue()
 
-        # 检查当前开机自启状态
-        self.check_current_autostart()
+        # 根据实际内容调整初始窗口大小
+        self.fit_window_to_content()
 
-        # 记录初始语言设置
-        self.log(f"初始语言设置为: {self.selected_language.get().upper()}")
-
-        # 加载模型列表
-        self.load_models()
+        # 首屏渲染后再做耗时初始化
+        self.root.after(30, self._start_deferred_initialization)
 
     def get_language_list(self):
         """获取语言列表（内置+自定义），按首字母排序"""
@@ -672,74 +915,95 @@ class OJGUI:
             self.log(f"获取模型列表时发生错误: {e}")
             return {'models': []}
 
-    def load_models(self):
-        """加载模型列表"""
+    def load_models(self, async_load=True):
+        """加载模型列表。默认异步执行，避免阻塞UI。"""
+        if async_load:
+            threading.Thread(target=self._load_models_thread, daemon=True).start()
+            return
+
+        self._load_models_sync()
+
+    def _load_models_thread(self):
         try:
-            self.log("开始加载模型列表...")
-
-            # 获取服务器模型列表
             response = self.get_models_with_index()
-            self.log(f"模型列表响应: {response}")
-
-            # 清空当前模型信息
-            self.model_info.clear()
-            self.custom_models.clear()
-
-            if isinstance(response, dict) and 'models' in response:
-                models = response['models']
-                self.log(f"获取到 {len(models)} 个服务器模型")
-
-                # 处理每个模型
-                for model_data in models:
-                    model_name = model_data.get('model', '未知模型')
-                    base_url = model_data.get('base_url', '')
-                    api_key = model_data.get('api_key', '')
-
-                    # 保存模型信息
-                    self.model_info[model_name] = {
-                        'model': model_name,
-                        'base_url': base_url,
-                        'api_key': api_key,
-                        'is_custom': False  # 服务器模型
-                    }
-            else:
-                self.log("响应格式不符合预期，没有找到模型列表")
-
-            # 加载自定义模型
-            self.load_custom_models_config()
-
-            # 构建模型名称列表
-            model_names = list(self.model_info.keys())
-
-            # 更新下拉框
-            self.model_combo['values'] = model_names
-
-            # 选择之前保存的模型，如果没有则选择第一个
-            saved_model = self.selected_model.get()
-            if saved_model and saved_model in model_names:
-                self.selected_model.set(saved_model)
-            elif model_names:
-                # 查找第一个服务器模型（非自定义模型）
-                server_models = [name for name, info in self.model_info.items() if not info.get('is_custom', False)]
-                if server_models:
-                    self.selected_model.set(server_models[0])
-                else:
-                    self.selected_model.set(model_names[0])
-
-                # 保存选择的模型
-                self.save_config()
-
-            # 触发模型改变事件，更新当前模型信息
-            self.on_model_changed()
-
-            self.log(f"成功加载 {len(model_names)} 个模型")
-            self.status_var.set(f"已加载 {len(model_names)} 个模型")
+            self.root.after(0, lambda: self._apply_models_response(response))
         except Exception as e:
-            self.log(f"加载模型列表时发生错误: {e}")
             import traceback
             error_details = traceback.format_exc()
+            self.root.after(0, lambda: self._handle_models_load_error(e, error_details))
+
+    def _load_models_sync(self):
+        try:
+            self.log("开始加载模型列表...")
+            response = self.get_models_with_index()
+            self._apply_models_response(response)
+        except Exception as e:
+            import traceback
+            self._handle_models_load_error(e, traceback.format_exc())
+
+    def _apply_models_response(self, response):
+        self.log(f"模型列表响应: {response}")
+
+        # 清空当前模型信息
+        self.model_info.clear()
+        self.custom_models.clear()
+
+        if isinstance(response, dict) and 'models' in response:
+            models = response['models']
+            self.log(f"获取到 {len(models)} 个服务器模型")
+
+            # 处理每个模型
+            for model_data in models:
+                model_name = model_data.get('model', '未知模型')
+                base_url = model_data.get('base_url', '')
+                api_key = model_data.get('api_key', '')
+
+                # 保存模型信息
+                self.model_info[model_name] = {
+                    'model': model_name,
+                    'base_url': base_url,
+                    'api_key': api_key,
+                    'is_custom': False  # 服务器模型
+                }
+        else:
+            self.log("响应格式不符合预期，没有找到模型列表")
+
+        # 加载自定义模型
+        self.load_custom_models_config()
+
+        # 构建模型名称列表
+        model_names = list(self.model_info.keys())
+
+        # 更新下拉框
+        self.model_combo['values'] = model_names
+
+        # 选择之前保存的模型，如果没有则选择第一个
+        saved_model = self.selected_model.get()
+        if saved_model and saved_model in model_names:
+            self.selected_model.set(saved_model)
+        elif model_names:
+            server_models = [name for name, info in self.model_info.items() if not info.get('is_custom', False)]
+            if server_models:
+                self.selected_model.set(server_models[0])
+            else:
+                self.selected_model.set(model_names[0])
+
+            self.save_config()
+
+        # 触发模型改变事件，更新当前模型信息
+        self.on_model_changed()
+
+        self.log(f"成功加载 {len(model_names)} 个模型")
+        self.status_var.set(f"已加载 {len(model_names)} 个模型")
+
+        # 模型数据到位后再做一次尺寸贴合，确保内容尽可能完整可见
+        self.fit_window_to_content()
+
+    def _handle_models_load_error(self, error, error_details=None):
+        self.log(f"加载模型列表时发生错误: {error}")
+        if error_details:
             self.log(f"详细错误信息:\n{error_details}")
-            self.status_var.set(f"加载模型列表失败: {e}")
+        self.status_var.set(f"加载模型列表失败: {error}")
 
     def load_custom_models(self):
         """加载自定义模型"""

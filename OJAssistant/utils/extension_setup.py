@@ -1,11 +1,11 @@
 import configparser
 import os
+import platform
 import subprocess
 import sys
 import threading
 import tkinter as tk
 import webbrowser
-import winreg
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -16,21 +16,27 @@ from selenium import webdriver
 from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.edge.service import Service as EdgeService
 
+try:
+    import winreg  # type: ignore[import-not-found]
+except ImportError:
+    winreg = None
+
 
 def get_install_dir_from_registry():
     """从注册表获取安装目录"""
-    try:
-        # 你的AppId
-        app_id = "{47A52B55-D3C4-4B88-904C-ADD610D87030}"
+    if platform.system() != "Windows" or winreg is None:
+        if getattr(sys, 'frozen', False):
+            return os.path.dirname(sys.executable)
+        return None
 
-        # 尝试从注册表读取安装路径
+    try:
+        app_id = "{47A52B55-D3C4-4B88-904C-ADD610D87030}"
         key_path = f"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{app_id}"
 
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY) as key:
             install_location, _ = winreg.QueryValueEx(key, "InstallLocation")
             return install_location
-    except WindowsError:
-        # 如果注册表中没有找到，则回退到exe所在目录
+    except OSError:
         if getattr(sys, 'frozen', False):
             return os.path.dirname(sys.executable)
         return None
@@ -278,6 +284,7 @@ class OJAutoCompleteApp:
         self.root = root
         self.root.title("浏览器拓展安装工具")
         self.root.geometry("900x700")
+        self.root.minsize(760, 520)
 
         # 设置窗口居中
         self.center_window()
@@ -304,10 +311,11 @@ class OJAutoCompleteApp:
     def center_window(self):
         """居中显示主窗口"""
         self.root.update_idletasks()
-        width = 900
-        height = 700
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
+
+        width = min(900, int(screen_width * 0.96))
+        height = min(700, int(screen_height * 0.93))
 
         x = (screen_width - width) // 2
         y = (screen_height - height) // 2
@@ -317,7 +325,11 @@ class OJAutoCompleteApp:
     def setup_styles(self):
         """设置样式"""
         style = ttk.Style()
-        style.theme_use('vista')
+        available_themes = set(style.theme_names())
+        preferred_themes = ["vista", "xpnative", "winnative", "clam", "alt", "default"]
+        selected_theme = next((theme for theme in preferred_themes if theme in available_themes), None)
+        if selected_theme:
+            style.theme_use(selected_theme)
 
         # 自定义颜色
         self.bg_color = '#f5f5f5'
@@ -530,7 +542,8 @@ class OJAutoCompleteApp:
     def get_edge_version(self):
         """获取Edge浏览器版本"""
         try:
-            import winreg
+            if platform.system() != "Windows" or winreg is None:
+                return None
 
             reg_paths = [
                 r"Software\Microsoft\Edge\BLBeacon",
@@ -545,7 +558,7 @@ class OJAutoCompleteApp:
                     winreg.CloseKey(key)
                     if version:
                         return version
-                except WindowsError:
+                except OSError:
                     continue
 
             # 如果通过注册表获取失败，尝试通过文件路径获取

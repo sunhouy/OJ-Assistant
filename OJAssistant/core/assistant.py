@@ -41,6 +41,7 @@ class OJAssistant:
         self.is_input_in_progress = False
         self.current_code = None
         self.current_progress = 0  # 当前进度
+        self.current_existing_code = ""
 
     def update_language(self, new_language):
         """更新当前语言设置"""
@@ -55,12 +56,20 @@ class OJAssistant:
                         try:
                             data = json.loads(message)
 
-                            if data.get('type') == 'OJ_content_auto_input':
+                            if data.get('type') in ('OJ_content_auto_input', 'educoder_content_auto_input'):
+                                await websocket.send(json.dumps({
+                                    "type": "server_ack",
+                                    "stage": "content_received",
+                                    "message": "已收到题目内容，开始生成代码",
+                                    "timestamp": datetime.now().isoformat()
+                                }, ensure_ascii=False))
                                 await self.handle_OJ_content_auto_input(websocket, data)
                             elif data.get('type') == 'test_results':
                                 await self.handle_test_results(websocket, data)
                             elif data.get('type') == 'ready_for_input':
                                 await self.handle_ready_for_input(websocket, data)
+                            elif data.get('type') == 'direct_input_complete':
+                                await self.handle_direct_input_complete(websocket, data)
                             elif data.get('type') == 'progress_request':
                                 # 处理前端进度请求
                                 await self.send_progress_update(websocket)
@@ -113,6 +122,7 @@ class OJAssistant:
 
             question_content = data.get('content', {})
             question_text = question_content.get('text', '')
+            existing_code = data.get('current_code', '') or ''
 
             # 发送题目内容到远程协助服务器（如果已启动）
             try:
@@ -163,6 +173,7 @@ class OJAssistant:
             if question_text:
                 # 保存题目内容供后续使用
                 self.last_question = question_text
+                self.current_existing_code = existing_code
                 # 重置状态
                 self.retry_count = 0
                 self.test_failures = []
@@ -173,6 +184,7 @@ class OJAssistant:
                 self.current_progress = 0  # 重置进度
 
                 self.gui.log(f"题目内容长度: {len(question_text)} 字符")
+                self.gui.log(f"编辑器现有代码长度: {len(existing_code)} 字符")
                 self.gui.root.after(0,
                                     lambda: self.gui.update_status(f"正在生成{self.current_language.upper()}代码..."))
 
@@ -181,7 +193,7 @@ class OJAssistant:
                 await self.send_progress_update(websocket)
 
                 # 生成代码
-                full_code = await self.get_complete_code_solution(question_text)
+                full_code = await self.get_complete_code_solution(question_text, existing_code)
 
                 if full_code:
                     self.current_code = full_code
@@ -326,24 +338,22 @@ class OJAssistant:
             else:
                 await websocket.send("开始自动输入代码...")
 
-            # 根据用户选择使用不同的输入方式
-            if self.gui.use_copy_paste.get():
-                success = self.input_simulator.paste_code(code)
+            # 优先使用清空后整段粘贴，避免逐字输入导致缩进漂移；失败时再回退流式输入
+            success = self.input_simulator.paste_code(code)
 
-                if success:
-                    # 更新进度
-                    self.update_progress(100)
-                    await self.send_progress_update(websocket)
+            if success:
+                # 更新进度
+                self.update_progress(100)
+                await self.send_progress_update(websocket)
 
-                    self.gui.root.after(0,
-                                        lambda: self.gui.update_status(f"{self.current_language.upper()}代码输入完成"))
-                else:
-                    if self.input_simulator.esc_pressed:
-                        await websocket.send("用户按ESC键终止了代码输入")
-                    else:
-                        await websocket.send("代码粘贴失败")
+                self.gui.root.after(0,
+                                    lambda: self.gui.update_status(f"{self.current_language.upper()}代码输入完成"))
             else:
-                await self._stream_input_code(websocket, code)
+                if self.input_simulator.esc_pressed:
+                    await websocket.send("用户按ESC键终止了代码输入")
+                else:
+                    await websocket.send("代码粘贴失败，回退到逐行输入")
+                    await self._stream_input_code(websocket, code)
 
             # 输入完成
             self.is_input_in_progress = False
@@ -365,6 +375,19 @@ class OJAssistant:
             self.gui.log(f"处理输入请求失败: {e}")
             await websocket.send(f"输入失败: {str(e)}")
             self.is_input_in_progress = False
+
+    async def handle_direct_input_complete(self, websocket, data):
+        """处理前端页面内直接输入完成通知。"""
+        self.is_input_in_progress = False
+        self.current_progress = 100
+        self.gui.root.after(0, lambda: self.gui.update_status("代码输入完成（页面内直写）"))
+
+        await websocket.send(json.dumps({
+            "type": "input_complete",
+            "success": True,
+            "source": "direct_page_injection",
+            "timestamp": datetime.now().isoformat()
+        }, ensure_ascii=False))
 
     async def _stream_input_code(self, websocket, code):
         """流式输入代码"""
@@ -535,19 +558,19 @@ class OJAssistant:
 专注于修复已知的错误，确保代码通过所有测试。"""
         return system_prompt
 
-    async def get_complete_code_solution(self, question_text):
+    async def get_complete_code_solution(self, question_text, existing_code=""):
         """获取完整代码解决方案（非流式）"""
         try:
             self.gui.log(f"获取完整{self.current_language.upper()}代码解决方案...")
 
-            prompt = self._build_prompt(question_text)
+            prompt = self._build_prompt(question_text, existing_code)
 
             response = await self.client.chat.completions.create(
                 model=self.model_name,  # 使用当前选择的模型
                 messages=[
                     {
                         "role": "system",
-                        "content": self._get_system_prompt()
+                        "content": self._get_system_prompt(bool(existing_code and existing_code.strip()))
                     },
                     {
                         "role": "user",
@@ -572,7 +595,7 @@ class OJAssistant:
             self.gui.log(f"获取完整{self.current_language.upper()}代码解决方案失败: {e}")
             return None
 
-    def _get_system_prompt(self):
+    def _get_system_prompt(self, has_existing_code=False):
         """根据当前语言获取系统提示词"""
         language_mapping = {
             "C": "C语言",
@@ -585,15 +608,22 @@ class OJAssistant:
 
         lang_name = language_mapping.get(self.current_language, self.current_language.upper())
 
-        system_prompt = f"""你是一个专业的编程助手，负责生成{lang_name}代码。
+        base_prompt = f"""你是一个专业的编程助手，负责生成{lang_name}代码。
 重要规则：
 1. 只返回纯代码，不要有任何解释、注释或额外文字
 2. 绝对不要使用任何代码块标记（如```或```{self.current_language}）
 3. 代码必须完整且可运行
 你的输出应该只包含代码，没有任何其他内容。"""
-        return system_prompt
 
-    def _build_prompt(self, question_text):
+        if has_existing_code:
+            base_prompt += """
+4. 用户编辑器中已有代码是不可改动的既有内容（包括空格、缩进、换行和注释），你必须严格保留，不得删除、重排、重命名或修改任何已有字符
+5. 只能在原有代码基础上补充缺失部分（例如 TODO 区域、空函数体、占位逻辑）
+6. 若必须新增代码，必须插入到不破坏既有内容的位置，且不修改任何既有行的文本内容"""
+
+        return base_prompt
+
+    def _build_prompt(self, question_text, existing_code=""):
         """构建提示词"""
         language_mapping = {
             "C": "C语言",
@@ -658,9 +688,17 @@ class OJAssistant:
 3. 使用标准的编程规范和最佳实践
             """
 
+        existing_code_block = ""
+        if existing_code and existing_code.strip():
+            existing_code_block = f"""
+    编辑器中已有代码（禁止修改任何已有内容，只能补充缺失部分）：
+    {existing_code}
+    """
+
         return f"""
 请根据以下编程题目要求，只提供完整的{lang_name}代码解决方案，不要包含任何解释、注释或其他文本。
 {requirements}
+    {existing_code_block}
 题目内容：
 {question_text}
 """

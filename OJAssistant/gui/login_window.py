@@ -1,17 +1,26 @@
-﻿import sys
+﻿import platform
+import sys
 import threading
 import tkinter as tk
 import webbrowser
+from pathlib import Path
 from tkinter import ttk, messagebox
 
 import requests
-import win32api
-import win32event
-import winerror
+
+try:
+    import win32api  # type: ignore[import-not-found]
+    import win32event  # type: ignore[import-not-found]
+    import winerror  # type: ignore[import-not-found]
+    WINDOWS_API_AVAILABLE = True
+except ImportError:
+    win32api = None
+    win32event = None
+    winerror = None
+    WINDOWS_API_AVAILABLE = False
 
 from __init__ import version
 
-WINDOWS_API_AVAILABLE = True
 from gui.dialogs import FirstRunDialog
 from gui.main_window import OJGUI
 from gui.update_window import UpdateWindow
@@ -22,14 +31,16 @@ class LoginWindow:
     def __init__(self, root):
         self.root = root
         self.root.title("OJ助手")
+        self.root.withdraw()
 
         # 尝试设置图标
         try:
-            self.root.iconphoto(True, tk.PhotoImage(file='app.png'))
-        except:
+            icon_path = Path(__file__).resolve().with_name("app.png")
+            self.root.iconphoto(True, tk.PhotoImage(file=str(icon_path)))
+        except Exception:
             pass
 
-        self.root.geometry("400x550")
+        self.root.minsize(720, 650)
         self.root.resizable(True, True)
 
         # 居中显示
@@ -53,8 +64,31 @@ class LoginWindow:
         # 后台检查单实例
         self.check_single_instance_in_background()
 
-        # 检查版本更新
-        self.check_update_before_login()
+        # 先渲染登录界面，再后台检查更新，避免首屏被网络请求阻塞
+        self.setup_ui()
+        self.load_saved_credentials()
+        self.fit_window_to_content()
+        self.root.after(1200, self.check_update_before_login)
+
+    def fit_window_to_content(self, min_width=780, min_height=700, max_width_ratio=0.98, max_height_ratio=0.97):
+        """根据内容自动调整窗口初始尺寸，并居中显示。"""
+        self.root.update_idletasks()
+
+        width = max(min_width, self.root.winfo_reqwidth())
+        height = max(min_height, self.root.winfo_reqheight())
+
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        max_width = int(screen_width * max_width_ratio)
+        max_height = int(screen_height * max_height_ratio)
+
+        width = min(width, max_width)
+        height = min(height, max_height)
+
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+        self.root.deiconify()
 
     def check_single_instance_in_background(self):
         """在后台线程中检查单实例"""
@@ -62,10 +96,11 @@ class LoginWindow:
 
     def _check_single_instance_thread(self):
         """检查单实例的线程函数"""
-        # 使用命名互斥锁检测单实例
-        mutex_name = "Global\\OJAssistantMutex_{}".format(self.machine_code)
+        if platform.system() == "Windows" and WINDOWS_API_AVAILABLE:
+            # 使用命名互斥锁检测单实例
+            mutex_name = "Global\\OJAssistantMutex_{}".format(self.machine_code)
 
-        try:
+            try:
                 # 尝试创建互斥锁
                 self.mutex_handle = win32event.CreateMutex(None, False, mutex_name)
                 last_error = win32api.GetLastError()
@@ -74,17 +109,19 @@ class LoginWindow:
                     # 互斥锁已存在，说明程序已在运行
                     self.root.after(0, self._show_instance_running_warning)
                     return
-        except Exception as e:
+            except Exception as e:
                 print(f"互斥锁创建失败: {e}")
                 # 如果互斥锁创建失败，使用其他方法检测
                 self._fallback_instance_check()
+            return
+
+        # 非 Windows 平台直接使用备用方式检测单实例
+        self._fallback_instance_check()
 
     def _fallback_instance_check(self):
         """备用方法检测单实例"""
         try:
             import socket
-            import psutil
-            import os
 
             # 检查端口占用
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -107,27 +144,10 @@ class LoginWindow:
 
     def check_update_before_login(self):
         """登录前检查版本更新"""
-        # 创建检查更新提示窗口
-        self.checking_window = tk.Toplevel(self.root)
-        self.checking_window.title("检查更新")
-        self.checking_window.geometry("300x150")
-        self.checking_window.resizable(True, True)
-        self.checking_window.transient(self.root)
-        self.checking_window.grab_set()
+        if not self.root.winfo_exists():
+            return
 
-        # 居中显示
-        self.checking_window.update_idletasks()
-        x = (self.checking_window.winfo_screenwidth() - self.checking_window.winfo_width()) // 2
-        y = (self.checking_window.winfo_screenheight() - self.checking_window.winfo_height()) // 2
-        self.checking_window.geometry(f"+{x}+{y}")
-
-        # 添加标签和进度条
-        ttk.Label(self.checking_window, text="正在检查版本更新...", font=("微软雅黑", 10)).pack(pady=20)
-        self.progress = ttk.Progressbar(self.checking_window, mode='indeterminate', length=200)
-        self.progress.pack()
-        self.progress.start()
-
-        # 在新线程中执行版本检查
+        self.status_var.set("准备就绪（后台检查更新中）")
         threading.Thread(target=self._perform_version_check, daemon=True).start()
 
     def _perform_version_check(self):
@@ -152,9 +172,6 @@ class LoginWindow:
 
     def _handle_update_result(self, result):
         """处理更新检查结果"""
-        # 关闭检查窗口
-        self.checking_window.destroy()
-
         try:
             if result.get('code') == 200:
                 data = result.get('data', {})
@@ -162,40 +179,26 @@ class LoginWindow:
                 # 检查是否需要强制更新
                 if data.get('need_update', 0) == 1 and data.get('force_update', 0) == 1:
                     # 需要强制更新，显示更新窗口，不允许登录
+                    self.status_var.set("检测到强制更新，请先更新")
                     self.show_update_window(data)
                     return
                 elif data.get('need_update', 0) == 1:
                     # 需要普通更新，询问用户是否更新
+                    self.status_var.set("发现新版本，可选择更新")
                     self.ask_for_optional_update(data)
                 else:
-                    # 不需要更新，继续显示登录界面
-                    self.setup_ui()
-                    self.load_saved_credentials()
-                    self.root.deiconify()  # 显示主窗口
+                    self.status_var.set("准备就绪")
             else:
-                # API返回错误，但仍然允许继续登录
-                messagebox.showwarning("警告", f"检查更新失败: {result.get('message', '未知错误')}\n将继续登录...")
-                self.setup_ui()
-                self.load_saved_credentials()
-                self.root.deiconify()
+                self.status_var.set("准备就绪（更新检查失败，不影响登录）")
 
         except Exception as e:
-            # 处理异常，仍然允许登录
-            messagebox.showwarning("警告", f"处理更新结果时出错: {str(e)}\n将继续登录...")
-            self.setup_ui()
-            self.load_saved_credentials()
-            self.root.deiconify()
+            self.status_var.set("准备就绪（更新检查失败，不影响登录）")
+            print(f"处理更新结果时出错: {e}")
 
     def _handle_update_error(self, error_msg):
         """处理更新检查错误"""
-        # 关闭检查窗口
-        self.checking_window.destroy()
-
-        # 显示错误信息，但仍然允许登录
-        messagebox.showwarning("警告", f"{error_msg}\n将继续登录...")
-        self.setup_ui()
-        self.load_saved_credentials()
-        self.root.deiconify()
+        self.status_var.set("准备就绪（更新检查失败，不影响登录）")
+        print(error_msg)
 
     def ask_for_optional_update(self, update_data):
         """询问用户是否进行普通更新"""
@@ -210,10 +213,7 @@ class LoginWindow:
             # 用户选择更新，显示更新窗口
             self.show_update_window(update_data)
         else:
-            # 用户选择不更新，继续登录
-            self.setup_ui()
-            self.load_saved_credentials()
-            self.root.deiconify()
+            self.status_var.set("准备就绪")
 
     def show_update_window(self, update_data):
         """显示更新窗口"""
@@ -249,8 +249,8 @@ class LoginWindow:
                 # 普通更新时，返回登录界面
                 update_root.destroy()
                 self.root.deiconify()
-                self.setup_ui()
-                self.load_saved_credentials()
+                self.fit_window_to_content()
+                self.status_var.set("准备就绪")
 
         update_root.protocol("WM_DELETE_WINDOW", on_update_window_close)
 
@@ -264,9 +264,46 @@ class LoginWindow:
 
     def setup_ui(self):
         """设置登录界面"""
+        self._responsive_layout_mode = None
+
         # 主框架
-        main_frame = ttk.Frame(self.root, padding="20")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        content_host = ttk.Frame(self.root)
+        content_host.pack(fill=tk.BOTH, expand=True)
+
+        canvas = tk.Canvas(content_host, highlightthickness=0, borderwidth=0)
+        scrollbar = ttk.Scrollbar(content_host, orient="vertical", command=canvas.yview)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        main_frame = ttk.Frame(canvas, padding="28")
+        canvas_window = canvas.create_window((0, 0), window=main_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        def update_scrollregion(_event=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def sync_canvas_width(event):
+            canvas.itemconfigure(canvas_window, width=event.width)
+            self._apply_responsive_layout(event.width)
+
+        def on_mousewheel(event):
+            if canvas.winfo_height() >= main_frame.winfo_reqheight():
+                return
+
+            if event.num == 4:
+                delta = -1
+            elif event.num == 5:
+                delta = 1
+            else:
+                delta = -1 if event.delta > 0 else 1
+
+            canvas.yview_scroll(delta, "units")
+
+        main_frame.bind("<Configure>", update_scrollregion)
+        canvas.bind("<Configure>", sync_canvas_width)
+        canvas.bind_all("<MouseWheel>", on_mousewheel)
+        canvas.bind_all("<Button-4>", on_mousewheel)
+        canvas.bind_all("<Button-5>", on_mousewheel)
 
         # 标题
         title_label = ttk.Label(
@@ -287,7 +324,7 @@ class LoginWindow:
 
         # 使用Notebook作为选择区
         self.notebook = ttk.Notebook(main_frame)
-        self.notebook.pack(fill=tk.X, pady=(0, 20))
+        self.notebook.pack(fill=tk.X, expand=False, pady=(0, 20))
 
         # 创建登录和注册两个标签页
         self.login_frame = ttk.Frame(self.notebook)
@@ -304,6 +341,9 @@ class LoginWindow:
 
         # 初始化注册界面
         self.setup_register_ui()
+
+        # 首次应用响应式布局
+        self._apply_responsive_layout(self.root.winfo_reqwidth())
 
         # 状态标签
         self.status_var = tk.StringVar(value="准备就绪")
@@ -324,86 +364,212 @@ class LoginWindow:
         # 绑定回车键 - 根据当前标签页执行不同操作
         self.root.bind('<Return>', lambda event: self.on_enter_key())
 
+    def _reset_frame_columns(self, frame, max_columns=3):
+        for index in range(max_columns):
+            frame.columnconfigure(index, weight=0)
+
+    def _layout_login_tab(self, mode):
+        self.login_username_label.grid_forget()
+        self.login_username_entry.grid_forget()
+        self.login_password_label.grid_forget()
+        self.login_password_entry.grid_forget()
+        self.login_options_frame.grid_forget()
+        self.login_button.grid_forget()
+
+        self._reset_frame_columns(self.login_form, max_columns=2)
+
+        self.remember_check.grid_forget()
+        self.auto_login_check.grid_forget()
+        self._reset_frame_columns(self.login_options_frame, max_columns=2)
+
+        if mode == "compact":
+            self.login_form.columnconfigure(0, weight=1)
+
+            self.login_username_label.grid(row=0, column=0, sticky=tk.W, pady=(8, 2))
+            self.login_username_entry.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 8))
+
+            self.login_password_label.grid(row=2, column=0, sticky=tk.W, pady=(2, 2))
+            self.login_password_entry.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=(0, 8))
+
+            self.login_options_frame.grid(row=4, column=0, sticky=tk.W, pady=(4, 8))
+            self.login_options_frame.columnconfigure(0, weight=1)
+            self.remember_check.grid(row=0, column=0, sticky=tk.W)
+            self.auto_login_check.grid(row=1, column=0, sticky=tk.W, pady=(4, 0))
+
+            self.login_button.grid(row=5, column=0, sticky=tk.EW, pady=(6, 0))
+        else:
+            self.login_form.columnconfigure(1, weight=1)
+
+            self.login_username_label.grid(row=0, column=0, sticky=tk.W, pady=(8, 6), padx=(0, 8))
+            self.login_username_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=(8, 6))
+
+            self.login_password_label.grid(row=1, column=0, sticky=tk.W, pady=(2, 6), padx=(0, 8))
+            self.login_password_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=(2, 6))
+
+            self.login_options_frame.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=(4, 8))
+            self.login_options_frame.columnconfigure(0, weight=1)
+            self.login_options_frame.columnconfigure(1, weight=1)
+            self.remember_check.grid(row=0, column=0, sticky=tk.W)
+            self.auto_login_check.grid(row=0, column=1, sticky=tk.W, padx=(20, 0))
+
+            self.login_button.grid(row=3, column=1, sticky=tk.E, pady=(6, 0))
+
+    def _layout_register_tab(self, mode):
+        self.register_username_label.grid_forget()
+        self.register_username_entry.grid_forget()
+        self.register_password_label.grid_forget()
+        self.register_password_entry.grid_forget()
+        self.invite_label.grid_forget()
+        self.invite_entry.grid_forget()
+        self.invite_hint_label.grid_forget()
+        self.register_button.grid_forget()
+
+        self._reset_frame_columns(self.register_form, max_columns=2)
+
+        if mode == "compact":
+            self.register_form.columnconfigure(0, weight=1)
+
+            self.register_username_label.grid(row=0, column=0, sticky=tk.W, pady=(8, 2))
+            self.register_username_entry.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(0, 8))
+
+            self.register_password_label.grid(row=2, column=0, sticky=tk.W, pady=(2, 2))
+            self.register_password_entry.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=(0, 8))
+
+            self.invite_label.grid(row=4, column=0, sticky=tk.W, pady=(2, 2))
+            self.invite_entry.grid(row=5, column=0, sticky=(tk.W, tk.E), pady=(0, 4))
+
+            self.invite_hint_label.configure(wraplength=280, justify=tk.LEFT)
+            self.invite_hint_label.grid(row=6, column=0, sticky=tk.W, pady=(0, 8))
+
+            self.register_button.grid(row=7, column=0, sticky=tk.EW, pady=(6, 0))
+        else:
+            self.register_form.columnconfigure(1, weight=1)
+
+            self.register_username_label.grid(row=0, column=0, sticky=tk.W, pady=(8, 6), padx=(0, 8))
+            self.register_username_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), pady=(8, 6))
+
+            self.register_password_label.grid(row=1, column=0, sticky=tk.W, pady=(2, 6), padx=(0, 8))
+            self.register_password_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=(2, 6))
+
+            self.invite_label.grid(row=2, column=0, sticky=tk.W, pady=(2, 6), padx=(0, 8))
+            self.invite_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=(2, 6))
+
+            self.invite_hint_label.configure(wraplength=420, justify=tk.LEFT)
+            self.invite_hint_label.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(0, 8))
+
+            self.register_button.grid(row=4, column=1, sticky=tk.E, pady=(6, 0))
+
+    def _apply_responsive_layout(self, available_width):
+        required_attrs = [
+            "login_form",
+            "register_form",
+            "login_username_label",
+            "login_username_entry",
+            "login_password_label",
+            "login_password_entry",
+            "login_options_frame",
+            "remember_check",
+            "auto_login_check",
+            "login_button",
+            "register_username_label",
+            "register_username_entry",
+            "register_password_label",
+            "register_password_entry",
+            "invite_label",
+            "invite_entry",
+            "invite_hint_label",
+            "register_button",
+        ]
+        if not all(hasattr(self, attr) for attr in required_attrs):
+            return
+
+        mode = "wide" if available_width >= 720 else "compact"
+        if mode == self._responsive_layout_mode:
+            return
+
+        self._responsive_layout_mode = mode
+        self._layout_login_tab(mode)
+        self._layout_register_tab(mode)
+
     def setup_login_ui(self):
         """设置登录界面"""
+        self.login_frame.columnconfigure(0, weight=1)
+        self.login_form = ttk.Frame(self.login_frame, padding=(18, 14, 18, 14))
+        self.login_form.grid(row=0, column=0, sticky=(tk.W, tk.E))
+
         # 用户名
-        ttk.Label(self.login_frame, text="用户名：").pack(anchor=tk.W, pady=(10, 0))
+        self.login_username_label = ttk.Label(self.login_form, text="用户名：")
         self.login_username_var = tk.StringVar()
-        self.login_username_entry = ttk.Entry(self.login_frame, textvariable=self.login_username_var, width=30)
-        self.login_username_entry.pack(fill=tk.X, pady=5)
+        self.login_username_entry = ttk.Entry(self.login_form, textvariable=self.login_username_var, width=30)
 
         # 密码
-        ttk.Label(self.login_frame, text="密码：").pack(anchor=tk.W, pady=(10, 0))
+        self.login_password_label = ttk.Label(self.login_form, text="密码：")
         self.login_password_var = tk.StringVar()
-        self.login_password_entry = ttk.Entry(self.login_frame, textvariable=self.login_password_var, show="*",
+        self.login_password_entry = ttk.Entry(self.login_form, textvariable=self.login_password_var, show="*",
                                               width=30)
-        self.login_password_entry.pack(fill=tk.X, pady=5)
 
         # 记住密码和自动登录
-        options_frame = ttk.Frame(self.login_frame)
-        options_frame.pack(fill=tk.X, pady=10)
+        self.login_options_frame = ttk.Frame(self.login_form)
 
         self.remember_var = tk.BooleanVar()
-        ttk.Checkbutton(
-            options_frame,
+        self.remember_check = ttk.Checkbutton(
+            self.login_options_frame,
             text="记住密码",
             variable=self.remember_var
-        ).pack(side=tk.LEFT)
+        )
 
         self.auto_login_var = tk.BooleanVar()
-        ttk.Checkbutton(
-            options_frame,
+        self.auto_login_check = ttk.Checkbutton(
+            self.login_options_frame,
             text="自动登录",
             variable=self.auto_login_var
-        ).pack(side=tk.LEFT, padx=(20, 0))
+        )
 
         # 登录按钮
         self.login_button = ttk.Button(
-            self.login_frame,
+            self.login_form,
             text="登录",
             command=self.login,
             width=10
         )
-        self.login_button.pack(pady=10)
 
     def setup_register_ui(self):
         """设置注册界面"""
+        self.register_frame.columnconfigure(0, weight=1)
+        self.register_form = ttk.Frame(self.register_frame, padding=(18, 14, 18, 14))
+        self.register_form.grid(row=0, column=0, sticky=(tk.W, tk.E))
+
         # 用户名
-        ttk.Label(self.register_frame, text="用户名:").pack(anchor=tk.W, pady=(10, 0))
+        self.register_username_label = ttk.Label(self.register_form, text="用户名:")
         self.register_username_var = tk.StringVar()
-        self.register_username_entry = ttk.Entry(self.register_frame, textvariable=self.register_username_var, width=30)
-        self.register_username_entry.pack(fill=tk.X, pady=5)
+        self.register_username_entry = ttk.Entry(self.register_form, textvariable=self.register_username_var, width=30)
 
         # 密码
-        ttk.Label(self.register_frame, text="密码:").pack(anchor=tk.W, pady=(10, 0))
+        self.register_password_label = ttk.Label(self.register_form, text="密码:")
         self.register_password_var = tk.StringVar()
-        self.register_password_entry = ttk.Entry(self.register_frame, textvariable=self.register_password_var, show="*",
+        self.register_password_entry = ttk.Entry(self.register_form, textvariable=self.register_password_var, show="*",
                                                  width=30)
-        self.register_password_entry.pack(fill=tk.X, pady=5)
 
         # 邀请码
-        ttk.Label(self.register_frame, text="邀请码（选填）:").pack(anchor=tk.W, pady=(10, 0))
+        self.invite_label = ttk.Label(self.register_form, text="邀请码（选填）:")
         self.invite_var = tk.StringVar()
-        self.invite_entry = ttk.Entry(self.register_frame, textvariable=self.invite_var, width=30)
-        self.invite_entry.pack(fill=tk.X, pady=5)
+        self.invite_entry = ttk.Entry(self.register_form, textvariable=self.invite_var, width=30)
 
         # 邀请码提示文字
-        invite_hint = ttk.Label(
-            self.register_frame,
+        self.invite_hint_label = ttk.Label(
+            self.register_form,
             text="使用邀请码注册免费送1天会员",
             foreground="green",
             font=("微软雅黑", 9)
         )
-        invite_hint.pack(pady=(0, 10))
 
         # 注册按钮
         self.register_button = ttk.Button(
-            self.register_frame,
+            self.register_form,
             text="注册",
             command=self.register,
             width=10
         )
-        self.register_button.pack(pady=10)
 
     def on_tab_changed(self, event=None):
         """标签页切换事件"""

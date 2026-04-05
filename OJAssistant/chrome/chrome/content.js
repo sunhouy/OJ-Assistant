@@ -981,18 +981,21 @@ class EducoderFloatingAssistant {
             }
 
             const content = this.extractPageContent();
-            this.currentQuestionContent = content;
+            const enrichedContent = await this.enrichContentWithImageOCR(content);
+            this.currentQuestionContent = enrichedContent;
+            const editorSnapshot = await this.extractCurrentEditorCode();
+            const currentEditorCode = editorSnapshot.code || '';
 
-            if (content.text) {
-                this.showContentPreview(content);
+            if (enrichedContent.text) {
+                this.showContentPreview(enrichedContent);
 
                 // 发送远程协助消息
                 this.sendRemoteMessage({
                     type: 'question_content',
                     content: {
-                        text_preview: content.text.substring(0, 10000) + (content.text.length > 10000 ? '...' : ''),
-                        element_count: content.elements.length,
-                        char_count: content.text.length,
+                        text_preview: enrichedContent.text.substring(0, 10000) + (enrichedContent.text.length > 10000 ? '...' : ''),
+                        element_count: enrichedContent.elements.length,
+                        char_count: enrichedContent.text.length,
                         url: window.location.href
                     },
                     timestamp: new Date().toISOString()
@@ -1003,9 +1006,14 @@ class EducoderFloatingAssistant {
                     type: 'educoder_content_auto_input',
                     timestamp: new Date().toISOString(),
                     url: window.location.href,
-                    content: content,
+                    content: enrichedContent,
+                    current_code: currentEditorCode || '',
                     auto_input: true
                 };
+
+                const readSource = editorSnapshot.source || 'unknown';
+                const readReason = editorSnapshot.reason ? `, 原因: ${editorSnapshot.reason}` : '';
+                this.showMessage(`检测到编辑器现有代码长度: ${(currentEditorCode || '').length} 字符, 来源: ${readSource}${readReason}`, 'system');
 
                 this.socket.send(JSON.stringify(messageData, null, 2));
                 this.showMessage('题目内容已发送到服务器，开始生成并输入代码...', 'sent');
@@ -1081,10 +1089,339 @@ class EducoderFloatingAssistant {
                 className: el.className,
                 textLength: (el.textContent || '').length
             })),
+            imageUrls: this.extractImageUrlsFromElements(elements),
             text: allText,
             timestamp: new Date().toISOString(),
             url: window.location.href
         };
+    }
+
+    extractImageUrlsFromElements(elements) {
+        const set = new Set();
+
+        for (const el of elements || []) {
+            const imgs = el.querySelectorAll('img');
+            imgs.forEach((img) => {
+                const candidates = [
+                    img.currentSrc,
+                    img.src,
+                    img.getAttribute('data-src'),
+                    img.getAttribute('data-original'),
+                    img.getAttribute('data-lazy-src')
+                ].filter(Boolean);
+
+                candidates.forEach((rawUrl) => {
+                    try {
+                        const absolute = new URL(rawUrl, window.location.href).href;
+                        if (/^https?:\/\//i.test(absolute) || absolute.startsWith('data:image/')) {
+                            set.add(absolute);
+                        }
+                    } catch (e) {
+                        // ignore invalid urls
+                    }
+                });
+            });
+        }
+
+        return Array.from(set);
+    }
+
+    async enrichContentWithImageOCR(content) {
+        try {
+            const imageUrls = Array.isArray(content?.imageUrls) ? content.imageUrls : [];
+            if (!imageUrls.length) {
+                return content;
+            }
+
+            this.showMessage(`检测到题目图片 ${imageUrls.length} 张，开始OCR识别...`, 'system');
+
+            const ocrParts = [];
+            for (let i = 0; i < imageUrls.length; i++) {
+                const imageUrl = imageUrls[i];
+                const ocrText = await this.ocrImageByApi(imageUrl, i + 1, imageUrls.length);
+                if (ocrText) {
+                    ocrParts.push(`[图片${i + 1}OCR]\n${ocrText}`);
+                }
+            }
+
+            if (!ocrParts.length) {
+                this.showMessage('图片OCR未识别到有效文字，将仅使用页面文本', 'warning');
+                return content;
+            }
+
+            const mergedText = [
+                content.text || '',
+                '',
+                '【题目图片OCR文字】',
+                ocrParts.join('\n\n')
+            ].join('\n').trim();
+
+            this.showMessage(`图片OCR完成，追加文本 ${ocrParts.length} 段`, 'system');
+
+            return {
+                ...content,
+                ocrText: ocrParts.join('\n\n'),
+                ocrImageCount: ocrParts.length,
+                text: mergedText
+            };
+        } catch (error) {
+            this.showMessage(`图片OCR流程失败: ${error.message}`, 'warning');
+            return content;
+        }
+    }
+
+    async ocrImageByApi(imageUrl, index, total) {
+        try {
+            this.showMessage(`OCR识别图片 ${index}/${total}...`, 'system');
+
+            const blob = await this.fetchImageBlob(imageUrl);
+            if (!blob) {
+                this.showMessage(`图片 ${index} 无法读取，跳过OCR`, 'warning');
+                return '';
+            }
+
+            const formData = new FormData();
+            const ext = (blob.type || 'image/png').split('/')[1] || 'png';
+            formData.append('file', blob, `question-image-${index}.${ext}`);
+            formData.append('lang', 'chi_tra+chi_sim+eng');
+
+            const response = await fetch('https://ocr.yhsun.cn/', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(`OCR接口响应异常: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const text = (data && data.text ? String(data.text) : '').trim();
+            if (!text) {
+                this.showMessage(`图片 ${index} OCR无文字结果`, 'warning');
+            }
+            return text;
+        } catch (error) {
+            this.showMessage(`图片 ${index} OCR失败: ${error.message}`, 'warning');
+            return '';
+        }
+    }
+
+    async fetchImageBlob(imageUrl) {
+        try {
+            if (imageUrl.startsWith('data:image/')) {
+                const response = await fetch(imageUrl);
+                if (!response.ok) {
+                    return null;
+                }
+                return await response.blob();
+            }
+
+            const response = await fetch(imageUrl, {
+                method: 'GET',
+                credentials: 'include'
+            });
+            if (!response.ok) {
+                return null;
+            }
+            return await response.blob();
+        } catch (error) {
+            return null;
+        }
+    }
+
+    async extractCurrentEditorCode() {
+        try {
+            const result = await new Promise((resolve) => {
+                const channel = `ea-editor-read-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                let timer = null;
+                let settled = false;
+
+                const finish = (payload) => {
+                    if (settled) {
+                        return;
+                    }
+                    settled = true;
+                    if (timer) {
+                        clearTimeout(timer);
+                        timer = null;
+                    }
+                    window.removeEventListener('message', onMessage);
+                    resolve(payload || { ok: false, code: '', used: '', reason: 'empty_payload' });
+                };
+
+                const onMessage = (event) => {
+                    if (event.source !== window || !event.data || event.data.source !== channel) {
+                        return;
+                    }
+                    finish(event.data);
+                };
+
+                window.addEventListener('message', onMessage);
+                timer = setTimeout(() => finish({ ok: false, code: '', used: '', reason: 'page_context_timeout' }), 2500);
+
+                const script = document.createElement('script');
+                script.textContent = `
+                    (function () {
+                        const source = ${JSON.stringify(channel)};
+                        let code = '';
+                        let ok = false;
+                        let used = '';
+
+                        function visible(el) {
+                            if (!el) return false;
+                            const style = window.getComputedStyle(el);
+                            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                            const rect = el.getBoundingClientRect();
+                            return rect.width > 0 && rect.height > 0;
+                        }
+
+                        try {
+                            if (!ok && window.monaco && window.monaco.editor) {
+                                const getEditors = window.monaco.editor.getEditors;
+                                if (typeof getEditors === 'function') {
+                                    const editors = getEditors.call(window.monaco.editor) || [];
+                                    const visibleEditors = editors.filter(ed => {
+                                        try {
+                                            const node = ed.getDomNode && ed.getDomNode();
+                                            return node && visible(node);
+                                        } catch (e) {
+                                            return false;
+                                        }
+                                    });
+                                    const target = visibleEditors.find(ed => ed.hasTextFocus && ed.hasTextFocus()) || visibleEditors[0] || null;
+                                    if (target && typeof target.getValue === 'function') {
+                                        code = target.getValue() || '';
+                                        ok = true;
+                                        used = 'monaco_editor_getValue';
+                                    }
+                                }
+                                if (!ok && typeof window.monaco.editor.getModels === 'function') {
+                                    const models = window.monaco.editor.getModels() || [];
+                                    if (models.length && typeof models[0].getValue === 'function') {
+                                        code = models[0].getValue() || '';
+                                        ok = true;
+                                        used = 'monaco_model_getValue';
+                                    }
+                                }
+                            }
+
+                            if (!ok) {
+                                const cmEls = Array.from(document.querySelectorAll('.CodeMirror'));
+                                for (const el of cmEls) {
+                                    if (!visible(el)) continue;
+                                    if (el.CodeMirror && typeof el.CodeMirror.getValue === 'function') {
+                                        code = el.CodeMirror.getValue() || '';
+                                        ok = true;
+                                        used = 'codemirror_getValue';
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (!ok && window.ace && typeof window.ace.edit === 'function') {
+                                const aceEls = Array.from(document.querySelectorAll('.ace_editor'));
+                                for (const el of aceEls) {
+                                    if (!visible(el)) continue;
+                                    const editor = window.ace.edit(el);
+                                    if (editor && typeof editor.getValue === 'function') {
+                                        code = editor.getValue() || '';
+                                        ok = true;
+                                        used = 'ace_getValue';
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (!ok) {
+                                const textareas = Array.from(document.querySelectorAll('textarea')).filter(el => {
+                                    if (el.closest('#educoder-assistant-floating')) return false;
+                                    return visible(el);
+                                });
+                                if (textareas.length) {
+                                    textareas.sort((a, b) => (b.value || '').length - (a.value || '').length);
+                                    code = textareas[0].value || '';
+                                    ok = true;
+                                    used = 'textarea_value';
+                                }
+                            }
+                        } catch (e) {
+                            // ignore
+                        }
+
+                        window.postMessage({ source, ok, code, used }, '*');
+                    })();
+                `;
+
+                script.onload = () => script.remove();
+                script.onerror = () => finish({ ok: false, code: '', used: '', reason: 'script_injection_error' });
+                (document.documentElement || document.head || document.body).appendChild(script);
+            });
+
+            if (result && result.ok) {
+                return {
+                    code: result.code || '',
+                    source: result.used || 'page_context',
+                    reason: ''
+                };
+            }
+
+            const fallback = this.extractCurrentEditorCodeFromDom();
+            if (fallback.code) {
+                return fallback;
+            }
+
+            return {
+                code: '',
+                source: 'none',
+                reason: (result && result.reason) ? result.reason : 'no_editor_content_found'
+            };
+        } catch (error) {
+            this.showMessage(`读取编辑器现有代码失败: ${error.message}`, 'warning');
+            const fallback = this.extractCurrentEditorCodeFromDom();
+            if (fallback.code) {
+                return fallback;
+            }
+            return {
+                code: '',
+                source: 'none',
+                reason: error.message
+            };
+        }
+    }
+
+    extractCurrentEditorCodeFromDom() {
+        try {
+            const textareas = Array.from(document.querySelectorAll('textarea')).filter(el => {
+                if (el.closest('#educoder-assistant-floating')) return false;
+                if (!this.isVisibleElement(el)) return false;
+                return typeof el.value === 'string' && el.value.trim().length > 0;
+            });
+            if (textareas.length) {
+                textareas.sort((a, b) => (b.value || '').length - (a.value || '').length);
+                return { code: textareas[0].value || '', source: 'dom_textarea', reason: '' };
+            }
+
+            const monacoView = document.querySelector('.monaco-editor .view-lines');
+            if (monacoView && this.isVisibleElement(monacoView)) {
+                const text = (monacoView.innerText || '').trimEnd();
+                if (text) {
+                    return { code: text, source: 'dom_monaco_view_lines', reason: 'page_context_unavailable' };
+                }
+            }
+
+            const codeBlocks = Array.from(document.querySelectorAll('pre code, pre')).filter(el => this.isVisibleElement(el));
+            if (codeBlocks.length) {
+                codeBlocks.sort((a, b) => (b.innerText || '').length - (a.innerText || '').length);
+                const text = (codeBlocks[0].innerText || '').trimEnd();
+                if (text) {
+                    return { code: text, source: 'dom_pre_code', reason: 'editor_api_unavailable' };
+                }
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        return { code: '', source: 'none', reason: 'dom_fallback_empty' };
     }
 
     // 智能纠错函数
@@ -1367,16 +1704,530 @@ class EducoderFloatingAssistant {
             return;
         }
 
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            this.socket.send(JSON.stringify({
-                type: 'ready_for_input',
-                code: this.generatedCode,
-                is_retry: this.retryCount > 0,
-                retry_count: this.retryCount,
-                // 如果是智能纠错，告诉服务器这是纠错后的输入
-                is_smart_fix: this.isSmartFixInProgress
-            }));
+        // 优先尝试页面内直接输入（头歌适配），失败再回退到服务端输入
+        this.tryDirectAutoInput(this.generatedCode).then((directSuccess) => {
+            if (directSuccess) {
+                return;
+            }
+
+            if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                this.socket.send(JSON.stringify({
+                    type: 'ready_for_input',
+                    code: this.generatedCode,
+                    is_retry: this.retryCount > 0,
+                    retry_count: this.retryCount,
+                    // 如果是智能纠错，告诉服务器这是纠错后的输入
+                    is_smart_fix: this.isSmartFixInProgress
+                }));
+            } else {
+                this.showMessage('服务端未连接，且页面内输入失败', 'error');
+                this.hideTopTipOverlay();
+                this.resetInputButtons();
+            }
+        });
+    }
+
+    async tryDirectAutoInput(code) {
+        try {
+            this.showMessage('正在尝试页面内直接输入代码...', 'system');
+
+            const directResult = await this.setCodeToPageEditor(code);
+            if (!directResult.ok) {
+                const reason = directResult.reason ? `，原因: ${directResult.reason}` : '';
+                this.showMessage(`未找到可写入的编辑器，回退到服务端输入${reason}`, 'warning');
+                return false;
+            }
+
+            this.handleInputComplete({ success: true });
+            this.showMessage('✅ 页面内直接输入成功（头歌适配）', 'system');
+
+            if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                this.socket.send(JSON.stringify({
+                    type: 'direct_input_complete',
+                    success: true,
+                    timestamp: new Date().toISOString()
+                }));
+            }
+
+            // 通知远程协助侧
+            this.sendRemoteMessage({
+                type: 'direct_input_complete',
+                mode: 'page_editor_injection',
+                timestamp: new Date().toISOString()
+            });
+
+            return true;
+        } catch (error) {
+            this.showMessage(`页面内输入失败: ${error.message}`, 'error');
+            return false;
         }
+    }
+
+    async setCodeToPageEditor(code) {
+        // 0) 优先在页面上下文执行，可访问页面自身JS对象（monaco/codemirror/ace）
+        const pageContextResult = await this.setCodeViaPageContext(code);
+        if (pageContextResult.ok) {
+            return pageContextResult;
+        }
+
+        // 1) Monaco Editor
+        if (this.setCodeToMonaco(code)) {
+            return { ok: true, reason: 'content_script_monaco' };
+        }
+
+        // 2) CodeMirror
+        if (this.setCodeToCodeMirror(code)) {
+            return { ok: true, reason: 'content_script_codemirror' };
+        }
+
+        // 3) Ace Editor
+        if (this.setCodeToAce(code)) {
+            return { ok: true, reason: 'content_script_ace' };
+        }
+
+        // 4) 原生 textarea
+        if (this.setCodeToTextarea(code)) {
+            return { ok: true, reason: 'textarea' };
+        }
+
+        // 5) contenteditable 编辑区
+        if (this.setCodeToContentEditable(code)) {
+            return { ok: true, reason: 'contenteditable' };
+        }
+
+        return {
+            ok: false,
+            reason: pageContextResult.reason || 'no_supported_editor_found'
+        };
+    }
+
+    setCodeViaPageContext(code) {
+        return new Promise((resolve) => {
+            const channel = `ea-direct-input-result-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            const timeoutMs = 2500;
+            let settled = false;
+            let timer = null;
+
+            const finish = (payload) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                if (timer) {
+                    clearTimeout(timer);
+                    timer = null;
+                }
+                window.removeEventListener('message', onMessage);
+                resolve(payload);
+            };
+
+            const onMessage = (event) => {
+                if (event.source !== window || !event.data) {
+                    return;
+                }
+                if (event.data.source !== channel) {
+                    return;
+                }
+
+                finish({
+                    ok: !!event.data.ok,
+                    reason: event.data.reason || ''
+                });
+            };
+
+            window.addEventListener('message', onMessage);
+
+            timer = setTimeout(() => {
+                finish({ ok: false, reason: 'page_context_timeout' });
+            }, timeoutMs);
+
+            const script = document.createElement('script');
+            script.textContent = `
+                (function () {
+                    const source = ${JSON.stringify(channel)};
+                    const code = ${JSON.stringify(code)};
+                    let ok = false;
+                    let reason = '';
+
+                    function visible(el) {
+                        if (!el) return false;
+                        const style = window.getComputedStyle(el);
+                        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+                        const rect = el.getBoundingClientRect();
+                        return rect.width > 0 && rect.height > 0;
+                    }
+
+                    try {
+                        // 先做一次通用清空动作，避免旧代码残留
+                        try {
+                            const active = document.activeElement;
+                            if (active && typeof active.focus === 'function') {
+                                active.focus();
+                                if (document.execCommand) {
+                                    document.execCommand('selectAll', false, null);
+                                    document.execCommand('delete', false, null);
+                                }
+                            }
+                        } catch (e) {
+                            // ignore clear by execCommand
+                        }
+
+                        // Monaco
+                        if (!ok && window.monaco && window.monaco.editor) {
+                            try {
+                                const editors = typeof window.monaco.editor.getEditors === 'function'
+                                    ? (window.monaco.editor.getEditors() || [])
+                                    : [];
+
+                                let target = null;
+                                if (editors.length) {
+                                    const visibleEditors = editors.filter(ed => {
+                                        try {
+                                            const node = ed.getDomNode && ed.getDomNode();
+                                            return node && visible(node);
+                                        } catch (e) {
+                                            return false;
+                                        }
+                                    });
+                                    target = visibleEditors.find(ed => ed.hasTextFocus && ed.hasTextFocus()) || visibleEditors[0] || null;
+                                }
+
+                                function typeCodeLikeKeyboard(editor, text) {
+                                    const lines = text.split('\n');
+
+                                    // 清空现有内容，再逐行输入
+                                    editor.setValue('');
+                                    editor.focus();
+
+                                    for (let idx = 0; idx < lines.length; idx++) {
+                                        if (lines[idx]) {
+                                            // 直接按原行文本输入，避免额外按键改变缩进
+                                            editor.trigger('keyboard', 'type', { text: lines[idx] });
+                                        }
+
+                                        // 仅换行，不执行Home，避免缩进被重置
+                                        if (idx < lines.length - 1) {
+                                            editor.trigger('keyboard', 'type', { text: '\n' });
+                                        }
+                                    }
+                                }
+
+                                if (!target) {
+                                    const models = typeof window.monaco.editor.getModels === 'function'
+                                        ? window.monaco.editor.getModels()
+                                        : [];
+                                    if (models && models.length) {
+                                        models[0].setValue(code);
+                                        ok = true;
+                                        reason = 'monaco_model_setValue';
+                                    }
+                                } else {
+                                    try {
+                                        target.setValue(code);
+                                        const verify = typeof target.getValue === 'function' ? target.getValue() : '';
+                                        if (verify === code) {
+                                            ok = true;
+                                            reason = 'monaco_editor_setValue_verified';
+                                        } else {
+                                            typeCodeLikeKeyboard(target, code);
+                                            ok = true;
+                                            reason = 'monaco_editor_keyboard_style_fallback';
+                                        }
+                                    } catch (typingError) {
+                                        // setValue与逐行输入都失败时，标记失败原因
+                                        reason = 'monaco_editor_write_failed:' + (typingError && typingError.message ? typingError.message : String(typingError));
+                                    }
+
+                                    if (ok && target.focus) {
+                                        if (target.focus) target.focus();
+                                    }
+                                }
+                            } catch (e) {
+                                reason = 'monaco_error:' + (e && e.message ? e.message : String(e));
+                            }
+                        }
+
+                        // CodeMirror
+                        if (!ok) {
+                            try {
+                                const cmEls = Array.from(document.querySelectorAll('.CodeMirror'));
+                                for (const el of cmEls) {
+                                    if (!visible(el)) continue;
+                                    if (el.CodeMirror && typeof el.CodeMirror.setValue === 'function') {
+                                        el.CodeMirror.setValue(code);
+                                        el.CodeMirror.focus();
+                                        ok = true;
+                                        reason = 'codemirror_setValue';
+                                        break;
+                                    }
+                                }
+                            } catch (e) {
+                                reason = 'codemirror_error:' + (e && e.message ? e.message : String(e));
+                            }
+                        }
+
+                        // Ace
+                        if (!ok && window.ace && typeof window.ace.edit === 'function') {
+                            try {
+                                const aceEls = Array.from(document.querySelectorAll('.ace_editor'));
+                                for (const el of aceEls) {
+                                    if (!visible(el)) continue;
+                                    const editor = window.ace.edit(el);
+                                    editor.setValue(code, -1);
+                                    editor.focus();
+                                    ok = true;
+                                    reason = 'ace_setValue';
+                                    break;
+                                }
+                            } catch (e) {
+                                reason = 'ace_error:' + (e && e.message ? e.message : String(e));
+                            }
+                        }
+
+                        // textarea
+                        if (!ok) {
+                            try {
+                                const textareas = Array.from(document.querySelectorAll('textarea'))
+                                    .filter(el => !el.readOnly && !el.disabled && visible(el));
+                                for (const el of textareas) {
+                                    el.focus();
+                                    el.value = code;
+                                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                                    ok = true;
+                                    reason = 'textarea_value';
+                                    break;
+                                }
+                            } catch (e) {
+                                reason = 'textarea_error:' + (e && e.message ? e.message : String(e));
+                            }
+                        }
+
+                        // contenteditable
+                        if (!ok) {
+                            try {
+                                const edits = Array.from(document.querySelectorAll('[contenteditable="true"]'))
+                                    .filter(el => visible(el));
+                                for (const el of edits) {
+                                    el.focus();
+                                    el.textContent = code;
+                                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                                    ok = true;
+                                    reason = 'contenteditable_textContent';
+                                    break;
+                                }
+                            } catch (e) {
+                                reason = 'contenteditable_error:' + (e && e.message ? e.message : String(e));
+                            }
+                        }
+                    } catch (e) {
+                        reason = 'page_context_error:' + (e && e.message ? e.message : String(e));
+                    }
+
+                    window.postMessage({ source, ok, reason }, '*');
+                })();
+            `;
+
+            script.onload = () => {
+                script.remove();
+            };
+            script.onerror = () => {
+                finish({ ok: false, reason: 'script_injection_error' });
+            };
+
+            (document.documentElement || document.head || document.body).appendChild(script);
+        });
+    }
+
+    setCodeToMonaco(code) {
+        try {
+            if (!window.monaco || !window.monaco.editor) {
+                return false;
+            }
+
+            const getEditors = window.monaco.editor.getEditors;
+            if (typeof getEditors === 'function') {
+                const editors = getEditors.call(window.monaco.editor) || [];
+                const visibleEditors = editors.filter(editor => {
+                    try {
+                        const node = editor.getDomNode && editor.getDomNode();
+                        return node && this.isVisibleElement(node);
+                    } catch (e) {
+                        return false;
+                    }
+                });
+
+                const targetEditor = visibleEditors.find(editor => editor.hasTextFocus && editor.hasTextFocus()) || visibleEditors[0];
+                if (targetEditor) {
+                    targetEditor.setValue(code);
+                    if (targetEditor.focus) {
+                        targetEditor.focus();
+                    }
+                    return true;
+                }
+            }
+
+            const models = window.monaco.editor.getModels ? window.monaco.editor.getModels() : [];
+            if (models && models.length > 0) {
+                models[0].setValue(code);
+                return true;
+            }
+        } catch (e) {
+            this.showMessage(`Monaco输入失败: ${e.message}`, 'warning');
+        }
+
+        return false;
+    }
+
+    setCodeToCodeMirror(code) {
+        try {
+            const cmElements = Array.from(document.querySelectorAll('.CodeMirror'));
+            for (const element of cmElements) {
+                if (!this.isVisibleElement(element)) {
+                    continue;
+                }
+                if (element.CodeMirror && typeof element.CodeMirror.setValue === 'function') {
+                    element.CodeMirror.setValue(code);
+                    element.CodeMirror.focus();
+                    return true;
+                }
+            }
+        } catch (e) {
+            this.showMessage(`CodeMirror输入失败: ${e.message}`, 'warning');
+        }
+
+        return false;
+    }
+
+    setCodeToAce(code) {
+        try {
+            if (!window.ace) {
+                return false;
+            }
+
+            const aceElements = Array.from(document.querySelectorAll('.ace_editor'));
+            for (const element of aceElements) {
+                if (!this.isVisibleElement(element)) {
+                    continue;
+                }
+                const editor = window.ace.edit(element);
+                editor.setValue(code, -1);
+                editor.focus();
+                return true;
+            }
+        } catch (e) {
+            this.showMessage(`Ace输入失败: ${e.message}`, 'warning');
+        }
+
+        return false;
+    }
+
+    setCodeToTextarea(code) {
+        const allTextareas = Array.from(document.querySelectorAll('textarea'));
+
+        // 过滤掉助手自身textarea，优先编辑器类textarea
+        const candidates = allTextareas.filter(textarea => {
+            if (!this.isVisibleElement(textarea)) {
+                return false;
+            }
+            if (textarea.readOnly || textarea.disabled) {
+                return false;
+            }
+            if (textarea.closest('#educoder-assistant-floating')) {
+                return false;
+            }
+            return true;
+        });
+
+        const ranked = candidates.sort((a, b) => {
+            const aScore = this.editorElementScore(a);
+            const bScore = this.editorElementScore(b);
+            return bScore - aScore;
+        });
+
+        for (const textarea of ranked) {
+            try {
+                textarea.focus();
+                textarea.value = code;
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                textarea.dispatchEvent(new Event('change', { bubbles: true }));
+                return true;
+            } catch (e) {
+                // continue
+            }
+        }
+
+        return false;
+    }
+
+    setCodeToContentEditable(code) {
+        const editableElements = Array.from(document.querySelectorAll('[contenteditable="true"]'));
+        const candidates = editableElements.filter(element => {
+            if (!this.isVisibleElement(element)) {
+                return false;
+            }
+            if (element.closest('#educoder-assistant-floating')) {
+                return false;
+            }
+            return true;
+        });
+
+        const ranked = candidates.sort((a, b) => {
+            const aScore = this.editorElementScore(a);
+            const bScore = this.editorElementScore(b);
+            return bScore - aScore;
+        });
+
+        for (const element of ranked) {
+            try {
+                element.focus();
+                element.textContent = code;
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+                return true;
+            } catch (e) {
+                // continue
+            }
+        }
+
+        return false;
+    }
+
+    isVisibleElement(element) {
+        if (!element) {
+            return false;
+        }
+        const style = window.getComputedStyle(element);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+            return false;
+        }
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+    }
+
+    editorElementScore(element) {
+        const marker = [
+            element.id || '',
+            element.className || '',
+            element.getAttribute('name') || '',
+            element.getAttribute('placeholder') || ''
+        ].join(' ').toLowerCase();
+
+        let score = 0;
+        const keywords = ['editor', 'code', 'monaco', 'codemirror', 'ace', 'input'];
+        keywords.forEach(word => {
+            if (marker.includes(word)) {
+                score += 2;
+            }
+        });
+
+        if (element.tagName === 'TEXTAREA') {
+            score += 1;
+        }
+
+        const rect = element.getBoundingClientRect();
+        score += Math.min(3, Math.floor((rect.width * rect.height) / 150000));
+
+        return score;
     }
 
     updateSmartFixButton() {

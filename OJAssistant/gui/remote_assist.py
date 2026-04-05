@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import platform
 import threading
 import time
 import tkinter as tk
@@ -70,12 +71,17 @@ class RemoteAssistDialog:
         # 创建对话框窗口
 
         self.dialog = tk.Toplevel(parent)
-        self.dialog.attributes('-toolwindow', False)
         self.dialog.title("远程协助")
-        self.dialog.geometry("800x1000")
+        self.dialog.geometry("980x920")
         self.dialog.resizable(True, True)  # 允许调整大小
-        self.dialog.minsize(600, 600)  # 设置最小尺寸
-        self.dialog.maxsize(1920, 1080)  # 设置最大尺寸
+        self.dialog.minsize(840, 700)  # 设置最小尺寸
+
+        if platform.system() == "Windows":
+            try:
+                self.dialog.attributes('-toolwindow', False)
+            except Exception:
+                pass
+
         # self.dialog.transient(parent)
         # self.dialog.grab_set()
         self.dialog.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -90,16 +96,11 @@ class RemoteAssistDialog:
             remote_message_callback=self._add_remote_message
         )
 
-        # 居中显示
-        self.dialog.update_idletasks()
-        width = self.dialog.winfo_width()
-        height = self.dialog.winfo_height()
-        x = (self.dialog.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.dialog.winfo_screenheight() // 2) - (height // 2)
-        self.dialog.geometry(f'{width}x{height}+{x}+{y}')
-
         # 设置UI
         self.setup_ui()
+
+        # 根据内容和屏幕大小重新定尺寸
+        self.fit_dialog_to_content()
 
         # 启动客户端
         self.start_client()
@@ -111,8 +112,38 @@ class RemoteAssistDialog:
     def setup_ui(self):
         """设置用户界面"""
         # 主框架
-        main_frame = ttk.Frame(self.dialog, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        content_host = ttk.Frame(self.dialog)
+        content_host.pack(fill=tk.BOTH, expand=True)
+
+        canvas = tk.Canvas(content_host, highlightthickness=0, borderwidth=0)
+        scrollbar = ttk.Scrollbar(content_host, orient="vertical", command=canvas.yview)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        main_frame = ttk.Frame(canvas, padding="16")
+        canvas_window = canvas.create_window((0, 0), window=main_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        def update_scrollregion(_event=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def sync_canvas_width(event):
+            canvas.itemconfigure(canvas_window, width=event.width)
+
+        def on_mousewheel(event):
+            if event.num == 4:
+                delta = -1
+            elif event.num == 5:
+                delta = 1
+            else:
+                delta = -1 if event.delta > 0 else 1
+            canvas.yview_scroll(delta, "units")
+
+        main_frame.bind("<Configure>", update_scrollregion)
+        canvas.bind("<Configure>", sync_canvas_width)
+        canvas.bind("<MouseWheel>", on_mousewheel)
+        canvas.bind("<Button-4>", on_mousewheel)
+        canvas.bind("<Button-5>", on_mousewheel)
 
         # 状态栏
         status_frame = ttk.Frame(main_frame)
@@ -280,6 +311,22 @@ class RemoteAssistDialog:
             text="特殊字符处理",
             variable=self.auto_input_special
         ).pack(side=tk.LEFT)
+
+    def fit_dialog_to_content(self, min_width=840, min_height=700, max_width_ratio=0.98, max_height_ratio=0.96):
+        """根据内容和屏幕大小调整窗口大小，确保界面完整可见。"""
+        self.dialog.update_idletasks()
+
+        width = max(min_width, self.dialog.winfo_reqwidth())
+        height = max(min_height, self.dialog.winfo_reqheight())
+
+        screen_width = self.dialog.winfo_screenwidth()
+        screen_height = self.dialog.winfo_screenheight()
+        width = min(width, int(screen_width * max_width_ratio))
+        height = min(height, int(screen_height * max_height_ratio))
+
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
+        self.dialog.geometry(f"{width}x{height}+{x}+{y}")
 
     def start_client(self):
         """启动客户端"""
@@ -481,8 +528,27 @@ class RemoteAssistDialog:
         self.auto_input_running = True
         self.stop_requested = False
 
-        # 设置ESC键监听
-        keyboard.on_press_key('esc', self._stop_auto_input_handler)
+        esc_hook = None
+        try:
+            esc_hook = keyboard.on_press_key('esc', self._stop_auto_input_handler)
+        except Exception as e:
+            self.dialog.after(0, lambda: self._add_message(
+                f"ESC全局监听不可用，将继续输入但无法ESC停止: {e}", is_info=True
+            ))
+
+        def safe_write(char):
+            try:
+                keyboard.write(char)
+            except Exception:
+                pyautogui.write(char, interval=0)
+
+        def safe_press(key):
+            try:
+                keyboard.press_and_release(key)
+                return
+            except Exception:
+                pass
+            pyautogui.press(key)
 
         try:
             # 等待用户切换到目标窗口
@@ -505,15 +571,15 @@ class RemoteAssistDialog:
 
                     try:
                         if char == '\n':
-                            keyboard.press_and_release('enter')
+                            safe_press('enter')
                         elif char == '\t':
-                            keyboard.press_and_release('tab')
+                            safe_press('tab')
                         elif char == ' ':
-                            keyboard.press_and_release('space')
+                            safe_press('space')
                         elif len(char) == 1 and ord(char) < 128:
-                            keyboard.write(char)
+                            safe_write(char)
                         else:
-                            keyboard.write(char)
+                            safe_write(char)
 
                         time.sleep(interval)
                     except Exception as e:
@@ -528,7 +594,7 @@ class RemoteAssistDialog:
                         break
 
                     try:
-                        keyboard.write(char)
+                        safe_write(char)
                         time.sleep(interval)
                     except Exception as e:
                         self.dialog.after(0, lambda: self._add_message(
@@ -547,8 +613,12 @@ class RemoteAssistDialog:
             ))
         finally:
             self.auto_input_running = False
-            # 移除ESC键监听
-            keyboard.unhook_all()
+            # 仅移除本次自动输入注册的ESC监听，避免影响其他热键
+            if esc_hook is not None:
+                try:
+                    keyboard.unhook(esc_hook)
+                except Exception:
+                    pass
 
     def _stop_auto_input_handler(self, event):
         """ESC键处理函数"""

@@ -27,7 +27,7 @@ class FirstRunDialog:
         # 创建对话框
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("安装浏览器扩展")
-        self.dialog.geometry("750x850")
+        self.dialog.geometry("820x760")
         # 设置背景色为白色
         self.dialog.configure(bg='white')
         self.dialog.resizable(True, True)
@@ -35,17 +35,29 @@ class FirstRunDialog:
         self.dialog.grab_set()
 
         # 设置窗口最小尺寸
-        self.dialog.minsize(650, 500)
-
-        # 居中显示
-        self.dialog.update_idletasks()
-        x = (parent.winfo_screenwidth() - self.dialog.winfo_width()) // 2
-        y = (parent.winfo_screenheight() - self.dialog.winfo_height()) // 2
-        self.dialog.geometry(f"+{x}+{y}")
+        self.dialog.minsize(560, 460)
 
         # 设置现代化样式
         self.setup_styles()
         self.setup_ui()
+        self.fit_dialog_to_screen()
+
+    def fit_dialog_to_screen(self, min_width=560, min_height=460, max_width_ratio=0.96, max_height_ratio=0.95):
+        """根据内容和屏幕大小调整欢迎窗口，确保内容可完整访问。"""
+        self.dialog.update_idletasks()
+
+        width = max(min_width, self.dialog.winfo_reqwidth())
+        height = max(min_height, self.dialog.winfo_reqheight())
+
+        screen_width = self.dialog.winfo_screenwidth()
+        screen_height = self.dialog.winfo_screenheight()
+
+        width = min(width, int(screen_width * max_width_ratio))
+        height = min(height, int(screen_height * max_height_ratio))
+
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
+        self.dialog.geometry(f"{width}x{height}+{x}+{y}")
 
     def find_extension_setup_file(self):
         """查找extension_setup.py文件"""
@@ -74,10 +86,11 @@ class FirstRunDialog:
     def setup_styles(self):
         """设置现代化样式"""
         style = ttk.Style()
-        try:
-            style.theme_use('vista')
-        except:
-            style.theme_use('winnative')
+        available_themes = set(style.theme_names())
+        preferred_themes = ["vista", "xpnative", "winnative", "clam", "alt", "default"]
+        selected_theme = next((theme for theme in preferred_themes if theme in available_themes), None)
+        if selected_theme:
+            style.theme_use(selected_theme)
 
         # 设置全局背景色为白色
         style.configure('.', background='white')
@@ -346,11 +359,25 @@ class FirstRunDialog:
 
         # 绑定鼠标滚轮滚动
         def on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            if event.num == 4:
+                delta = -1
+            elif event.num == 5:
+                delta = 1
+            elif getattr(event, "delta", 0):
+                delta = int(-1 * (event.delta / 120))
+            else:
+                delta = 0
 
-        # 绑定到Canvas和可滚动框架
-        canvas.bind_all("<MouseWheel>", on_mousewheel)
-        scrollable_frame.bind_all("<MouseWheel>", on_mousewheel)
+            if delta:
+                canvas.yview_scroll(delta, "units")
+
+        # 绑定滚轮事件（Windows/macOS 与 Linux 都支持）
+        canvas.bind("<MouseWheel>", on_mousewheel)
+        canvas.bind("<Button-4>", on_mousewheel)
+        canvas.bind("<Button-5>", on_mousewheel)
+        scrollable_frame.bind("<MouseWheel>", on_mousewheel)
+        scrollable_frame.bind("<Button-4>", on_mousewheel)
+        scrollable_frame.bind("<Button-5>", on_mousewheel)
 
         # 确保窗口加载时焦点正确
         self.dialog.after(100, lambda: self.dialog.focus_force())
@@ -358,47 +385,33 @@ class FirstRunDialog:
     def open_extension_install(self):
         """打开浏览器扩展安装工具"""
         try:
-            if not hasattr(self, 'EXTENSION_SETUP_AVAILABLE') or not self.EXTENSION_SETUP_AVAILABLE:
-                # 如果无法导入，尝试使用子进程方式
-                script_path = self.find_extension_setup_file()
-                if script_path and os.path.exists(script_path):
-                    python_exe = sys.executable
-                    subprocess.Popen([python_exe, script_path],
-                                     creationflags=subprocess.CREATE_NEW_CONSOLE)
-                else:
-                    raise ImportError("无法找到 extension_setup.py 文件")
-            else:
-                # 在新线程中运行扩展安装工具，避免阻塞主界面
-                threading.Thread(
-                    target=self._run_extension_setup_thread,
-                    daemon=True
-                ).start()
+            self._launch_extension_setup_process()
 
         except Exception as e:
             # 显示错误信息
             messagebox.showerror("错误", f"无法打开扩展安装工具:\n{str(e)}")
 
+    def _launch_extension_setup_process(self):
+        """通过子进程启动扩展安装工具，避免跨线程Tk调用问题。"""
+        script_path = self.find_extension_setup_file()
+        if not script_path or not os.path.exists(script_path):
+            raise ImportError("无法找到 extension_setup.py 文件")
+
+        kwargs = {}
+        if os.name == "nt" and hasattr(subprocess, "CREATE_NEW_CONSOLE"):
+            kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
+
+        subprocess.Popen([sys.executable, script_path], **kwargs)
+
     def _run_extension_setup_thread(self):
         """在新线程中运行扩展安装工具"""
         try:
-            # 直接运行扩展安装工具的main函数
-            self.run_extension_setup()
+            self._launch_extension_setup_process()
         except Exception as e:
-            # 如果直接运行失败，尝试使用子进程
-            try:
-                script_path = self.find_extension_setup_file()
-                if script_path and os.path.exists(script_path):
-                    python_exe = sys.executable
-                    subprocess.Popen([python_exe, script_path],
-                                     creationflags=subprocess.CREATE_NEW_CONSOLE)
-                else:
-                    raise e
-            except Exception as e2:
-                # 在GUI线程中显示错误信息
-                self.dialog.after(0, lambda: messagebox.showerror(
-                    "错误",
-                    f"无法打开扩展安装工具:\n{str(e2)}"
-                ))
+            self.dialog.after(0, lambda: messagebox.showerror(
+                "错误",
+                f"无法打开扩展安装工具:\n{str(e)}"
+            ))
 
     def on_confirm(self):
         """确定按钮点击事件"""
